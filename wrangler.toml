@@ -26,8 +26,12 @@ binding = "ASSETS"
 
 [vars]
 # 二维码里写死的域名。留空则按请求的 Host 动态生成 —— 换域名后旧贴纸会失效，
-# 所以正式使用一定要填成你的正式域名（workers.dev 或自定义域）。
-PUBLIC_BASE_URL = ""
+# 所以正式使用一定要填成你的正式域名。
+#
+# 这里必须是自定义域名，不能用 *.workers.dev：后者在中国大陆被 DNS 污染 + SNI 阻断，
+# 扫码的人根本打不开（详见 README「已知边界」）。
+# 自定义域名已在 Cloudflare 面板绑定到本 Worker。
+PUBLIC_BASE_URL = "https://2weima.9810010.xyz"
 # 页面时间显示的时区偏移（小时）
 TZ_OFFSET_HOURS = "8"
 
