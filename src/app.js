@@ -24,6 +24,8 @@ const CALL_LOG_LIMIT = 30;
 /** 后台登录限流 */
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_LIMIT = 10;
+/** 注册限流（同一 IP） */
+const SIGNUP_LIMIT = 5;
 
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -118,24 +120,53 @@ function createApp(options) {
 
   /* ----------------------------- 会话 ----------------------------- */
 
-  async function isAuthed(req) {
+  /**
+   * 会话载荷：`<过期时间>:admin`（平台方）或 `<过期时间>:u:<用户id>`（车主）。
+   * 两种身份共用一个签名 Cookie，权限在下面按 kind 区分。
+   */
+  async function currentSession(req) {
     const cookies = core.parseCookies(req.cookie);
     const payload = await core.unsignValue(cookies[SESSION_COOKIE], sessionSecret);
-    if (!payload) return false;
+    if (!payload) return null;
+
     const index = payload.indexOf(':');
-    if (index < 0) return false;
+    if (index < 0) return null;
     const expiresAt = Number(payload.slice(0, index));
-    if (!Number.isFinite(expiresAt) || expiresAt < Date.now()) return false;
-    return payload.slice(index + 1) === 'admin';
+    if (!Number.isFinite(expiresAt) || expiresAt < Date.now()) return null;
+
+    const subject = payload.slice(index + 1);
+    if (subject === 'admin') return { kind: 'admin' };
+    if (subject.startsWith('u:')) return { kind: 'user', userId: subject.slice(2) };
+    return null;
   }
 
-  async function sessionCookieHeader(req) {
-    const token = await core.signValue(`${Date.now() + SESSION_TTL_MS}:admin`, sessionSecret);
+  async function sessionCookieHeader(req, subject) {
+    const token = await core.signValue(`${Date.now() + SESSION_TTL_MS}:${subject}`, sessionSecret);
     const maxAge = Math.floor(SESSION_TTL_MS / 1000);
     return (
       `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}` +
       (requestIsHttps(req) ? '; Secure' : '')
     );
+  }
+
+  /** 登录后各自回自己的首页 */
+  function homeFor(session) {
+    if (!session) return '/login';
+    return session.kind === 'admin' ? '/admin' : '/me';
+  }
+
+  /**
+   * 这辆车当前这个人能动吗。
+   * 管理员能动全部；车主只能动自己的（owner_id 为空的属于平台方自己录的车）。
+   * 不属于自己的一律按「不存在」处理，避免泄露别人有哪些编号。
+   */
+  async function loadCarFor(session, carId) {
+    if (!session) return { error: redirectResponse('/login') };
+    const car = await store.getCar(carId);
+    if (!car) return { error: pageResponse(404, '车辆不存在', '它可能已经被删除了。') };
+    if (session.kind === 'admin') return { car };
+    if (car.owner_id && car.owner_id === session.userId) return { car };
+    return { error: pageResponse(404, '车辆不存在', '它可能已经被删除了。') };
   }
 
   /**
@@ -214,7 +245,9 @@ function createApp(options) {
    * 界面上的措辞刻意保持中性，不暴露"车主有几辆车"以外的信息。
    */
   async function handleUniversalScan(req) {
-    const cars = (await store.listCars()).filter((car) => car.enabled);
+    // 只认平台方自己录的车（owner_id 为空）。
+    // 多租户下这里绝不能把车主的车列出来 —— 那等于把所有人的车牌公开。
+    const cars = (await store.listCars()).filter((car) => car.enabled && !car.owner_id);
 
     if (cars.length === 0) {
       return pageResponse(
@@ -324,25 +357,48 @@ function createApp(options) {
     );
   }
 
-  /* --------------------------- 车主后台 --------------------------- */
+  /* --------------------------- 登录与注册 --------------------------- */
+
+  /** 手机号去空格/横线，邮箱统一小写，避免「同一人注册两次」 */
+  function normalizeContact(value) {
+    const raw = String(value || '').trim().replace(/[\s-]/g, '');
+    return raw.includes('@') ? raw.toLowerCase() : raw;
+  }
+
+  function contactLooksValid(contact) {
+    if (!contact) return false;
+    if (contact.includes('@')) return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contact);
+    return /^\+?\d{6,20}$/.test(contact);
+  }
+
+  async function verifyPlatformPassword(password) {
+    if (!auth.isConfigured) return false;
+    return auth.verify(password);
+  }
 
   async function handleLoginForm(req) {
-    if (await isAuthed(req)) return redirectResponse('/admin');
+    const session = await currentSession(req);
+    if (session) return redirectResponse(homeFor(session));
     return htmlResponse(
       200,
-      views.loginPage({ error: '', configured: auth.isConfigured, hint: auth.hint || '' })
+      views.loginPage({
+        mode: 'login',
+        error: '',
+        platformReady: auth.isConfigured,
+        hint: auth.hint || '',
+      })
     );
   }
 
-  async function handleLoginSubmit(req) {
-    if (!auth.isConfigured) {
-      return htmlResponse(
-        503,
-        views.loginPage({ error: '', configured: false, hint: auth.hint || '' })
-      );
-    }
+  async function handleSignupForm(req) {
+    const session = await currentSession(req);
+    if (session) return redirectResponse(homeFor(session));
+    return htmlResponse(200, views.loginPage({ mode: 'signup', error: '', platformReady: true, hint: '' }));
+  }
 
+  async function handleLoginSubmit(req) {
     const form = core.parseForm(await req.readText());
+    const contact = normalizeContact(form.contact);
     const password = String(form.password || '');
 
     const allowed = await store.bumpRateLimit(`login:${req.ip}`, LOGIN_WINDOW_MS, LOGIN_LIMIT);
@@ -350,63 +406,136 @@ function createApp(options) {
       return htmlResponse(
         429,
         views.loginPage({
+          mode: 'login',
           error: '尝试过于频繁，请稍后再试。',
-          configured: true,
+          platformReady: auth.isConfigured,
           hint: '',
         })
       );
     }
 
-    if (!(await auth.verify(password))) {
+    // 不填账号 = 平台方，用后台密码登录
+    if (!contact) {
+      if (await verifyPlatformPassword(password)) {
+        return redirectResponse('/admin', { 'Set-Cookie': await sessionCookieHeader(req, 'admin') });
+      }
       return htmlResponse(
         401,
-        views.loginPage({ error: '密码不正确。', configured: true, hint: '' })
+        views.loginPage({
+          mode: 'login',
+          error: auth.isConfigured ? '密码不正确。' : '后台还没配置管理密码。',
+          platformReady: auth.isConfigured,
+          hint: auth.hint || '',
+        })
       );
     }
 
-    return redirectResponse('/admin', { 'Set-Cookie': await sessionCookieHeader(req) });
+    const user = await store.getUserByContact(contact);
+    // 账号不存在和密码错误回同一句话，避免被用来探测谁注册过
+    if (!user || user.disabled || !(await core.verifyPassword(password, user.password_hash))) {
+      return htmlResponse(
+        401,
+        views.loginPage({ mode: 'login', error: '账号或密码不正确。', platformReady: auth.isConfigured, hint: '' })
+      );
+    }
+
+    return redirectResponse('/me', { 'Set-Cookie': await sessionCookieHeader(req, `u:${user.id}`) });
+  }
+
+  async function handleSignupSubmit(req) {
+    const form = core.parseForm(await req.readText());
+    const contact = normalizeContact(form.contact);
+    const name = core.truncate(String(form.name || '').trim(), 20);
+    const password = String(form.password || '');
+
+    const fail = (status, error) =>
+      htmlResponse(status, views.loginPage({ mode: 'signup', error, platformReady: true, hint: '' }));
+
+    const allowed = await store.bumpRateLimit(`signup:${req.ip}`, LOGIN_WINDOW_MS, SIGNUP_LIMIT);
+    if (!allowed) return fail(429, '注册太频繁了，请过一会儿再试。');
+    if (!contactLooksValid(contact)) return fail(400, '请填写手机号或邮箱（手机号要写成纯数字）。');
+    if (password.length < 8) return fail(400, '密码至少 8 位。');
+    if (await store.getUserByContact(contact)) return fail(409, '这个手机号/邮箱已经注册过了，直接登录即可。');
+
+    const user = await store.createUser({
+      id: core.randomCode(12),
+      contact,
+      name,
+      password_hash: await core.hashPassword(password),
+      role: 'owner',
+    });
+
+    return redirectResponse('/me', { 'Set-Cookie': await sessionCookieHeader(req, `u:${user.id}`) });
   }
 
   function handleLogout() {
-    return redirectResponse('/admin/login', { 'Set-Cookie': CLEAR_COOKIE_HEADER });
+    return redirectResponse('/login', { 'Set-Cookie': CLEAR_COOKIE_HEADER });
   }
 
-  async function renderAdmin(req, url) {
+  /* --------------------------- 车主 / 平台后台 --------------------------- */
+
+  async function renderDashboard(session, req, url) {
     const base = baseUrlOf(req);
+    const isAdmin = session.kind === 'admin';
+
+    const users = isAdmin ? await store.listUsers() : [];
+    const userById = new Map(users.map((u) => [u.id, u]));
+
+    const rows = isAdmin ? await store.listCars() : await store.listCarsByOwner(session.userId);
     const cars = [];
-    for (const car of await store.listCars()) {
+    for (const car of rows) {
+      const owner = car.owner_id ? userById.get(car.owner_id) : null;
       cars.push(
         Object.assign({}, car, {
           qrSvg: qrSvgForContent(carUrl(car, base)),
           scanUrl: carUrl(car, base),
           editUrl: `${base}/edit/${await editTokenFor(car.id)}`,
+          owner_contact: owner ? owner.contact : '',
         })
       );
     }
+
     const enabledCars = cars.filter((car) => car.enabled);
     const noticeKey = url.searchParams.get('notice');
+
     return htmlResponse(
       200,
       views.adminPage({
+        mode: isAdmin ? 'admin' : 'owner',
+        account: isAdmin ? null : await store.getUser(session.userId),
         cars,
-        messages: await store.listMessages(100),
+        messages: isAdmin
+          ? await store.listMessages(100)
+          : await store.listMessagesByOwner(session.userId, 100),
+        users,
         baseUrl: base,
-        // 通用码的说明随启用数量变化：一辆时扫码直达，多辆时扫码人要选
-        universal: {
-          url: universalUrl(base),
-          qrSvg: qrSvgForContent(universalUrl(base)),
-          enabledCount: enabledCars.length,
-          plates: enabledCars.map((car) => car.plate || '未填写车牌'),
-        },
-        unread: await store.countUnread(),
+        // 通用码是平台级的（只认平台方自己录的车），车主后台不展示
+        universal: isAdmin
+          ? {
+              url: universalUrl(base),
+              qrSvg: qrSvgForContent(universalUrl(base)),
+              enabledCount: enabledCars.length,
+              plates: enabledCars.map((car) => car.plate || '未填写车牌'),
+            }
+          : null,
+        unread: isAdmin ? await store.countUnread() : await store.countUnreadByOwner(session.userId),
         notice: noticeKey && NOTICES[noticeKey] ? NOTICES[noticeKey] : null,
       })
     );
   }
 
   async function handleAdminHome(req, url) {
-    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
-    return renderAdmin(req, url);
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
+    if (session.kind !== 'admin') return redirectResponse('/me');
+    return renderDashboard(session, req, url);
+  }
+
+  async function handleMyCars(req, url) {
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
+    if (session.kind === 'admin') return redirectResponse('/admin');
+    return renderDashboard(session, req, url);
   }
 
   function collectCarFields(form) {
@@ -429,30 +558,48 @@ function createApp(options) {
   }
 
   async function handleCreateCar(req) {
-    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
     const fields = collectCarFields(core.parseForm(await req.readText()));
-    await store.createCar(Object.assign({ id: await uniqueCarId() }, fields));
-    return redirectResponse('/admin?notice=created');
+    await store.createCar(
+      Object.assign(
+        {
+          id: await uniqueCarId(),
+          // 车主建的归自己；平台方建的 owner_id 为空（属于平台自己录的车）
+          owner_id: session.kind === 'user' ? session.userId : null,
+        },
+        fields
+      )
+    );
+    return redirectResponse(`${homeFor(session)}?notice=created`);
   }
 
   async function handleUpdateCar(req, url, params) {
-    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
-    const car = await store.getCar(params[0]);
-    if (!car) return pageResponse(404, '车辆不存在', '它可能已经被删除了。');
+    const session = await currentSession(req);
+    const found = await loadCarFor(session, params[0]);
+    if (found.error) return found.error;
     const fields = collectCarFields(core.parseForm(await req.readText()));
-    await store.updateCar(car.id, fields);
-    return redirectResponse('/admin?notice=updated');
+    await store.updateCar(found.car.id, fields);
+    return redirectResponse(`${homeFor(session)}?notice=updated`);
   }
 
   async function handleDeleteCar(req, url, params) {
-    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
-    await store.deleteCar(params[0]);
-    return redirectResponse('/admin?notice=deleted');
+    const session = await currentSession(req);
+    const found = await loadCarFor(session, params[0]);
+    if (found.error) return found.error;
+    await store.deleteCar(found.car.id);
+    return redirectResponse(`${homeFor(session)}?notice=deleted`);
+  }
+
+  /** 通用二维码只服务平台方自己录的车（owner_id 为空），不碰车主的车 */
+  async function platformCars() {
+    return (await store.listCars()).filter((car) => !car.owner_id);
   }
 
   /** 通用二维码本身的 SVG（后台顶部那张） */
   async function handleUniversalQrSvg(req, url) {
-    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
+    const session = await currentSession(req);
+    if (!session || session.kind !== 'admin') return redirectResponse('/login');
     const disposition = url.searchParams.get('download') === '1' ? 'attachment' : 'inline';
     return response(
       200,
@@ -470,7 +617,8 @@ function createApp(options) {
 
   /** 通用贴纸的打印页：一种设计，贴在任一车上 */
   async function handleUniversalPrint(req) {
-    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
+    const session = await currentSession(req);
+    if (!session || session.kind !== 'admin') return redirectResponse('/login');
     const base = baseUrlOf(req);
     return htmlResponse(
       200,
@@ -481,11 +629,14 @@ function createApp(options) {
     );
   }
 
-  /** 批量打印：每辆车一张贴纸，排在一页里一次打完 */
+  /** 批量打印：每辆车一张贴纸，排在一页里一次打完（车主只打自己的） */
   async function handlePrintAll(req) {
-    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
     const base = baseUrlOf(req);
-    const cars = (await store.listCars())
+    const rows =
+      session.kind === 'admin' ? await platformCars() : await store.listCarsByOwner(session.userId);
+    const cars = rows
       .filter((car) => car.enabled)
       .map((car) => ({
         id: car.id,
@@ -497,9 +648,10 @@ function createApp(options) {
   }
 
   async function handleQrSvg(req, url, params) {
-    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
-    const car = await store.getCar(params[0]);
-    if (!car) return pageResponse(404, '车辆不存在', '它可能已经被删除了。');
+    const session = await currentSession(req);
+    const found = await loadCarFor(session, params[0]);
+    if (found.error) return found.error;
+    const car = found.car;
 
     const disposition = url.searchParams.get('download') === '1' ? 'attachment' : 'inline';
     return response(
@@ -517,9 +669,10 @@ function createApp(options) {
   }
 
   async function handlePrint(req, url, params) {
-    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
-    const car = await store.getCar(params[0]);
-    if (!car) return pageResponse(404, '车辆不存在', '它可能已经被删除了。');
+    const session = await currentSession(req);
+    const found = await loadCarFor(session, params[0]);
+    if (found.error) return found.error;
+    const car = found.car;
     const base = baseUrlOf(req);
     return htmlResponse(
       200,
@@ -528,15 +681,17 @@ function createApp(options) {
   }
 
   async function handleMarkRead(req, url, params) {
-    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
-    await store.markRead(params[0]);
-    return redirectResponse('/admin');
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
+    await store.markRead(params[0], session.kind === 'user' ? session.userId : null);
+    return redirectResponse(homeFor(session));
   }
 
   async function handleMarkAllRead(req) {
-    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
-    await store.markAllRead();
-    return redirectResponse('/admin');
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
+    await store.markAllRead(session.kind === 'user' ? session.userId : null);
+    return redirectResponse(homeFor(session));
   }
 
   /* ----------------------------- 路由表 ---------------------------- */
@@ -557,12 +712,34 @@ function createApp(options) {
     ['POST', new RegExp(`^/edit/${TOKEN}$`), handleCarEditSubmit],
     ['GET', new RegExp(`^/edit/${TOKEN}/print$`), handleCarEditPrint],
 
+    ['GET', /^\/login$/, handleLoginForm],
+    ['POST', /^\/login$/, handleLoginSubmit],
+    ['GET', /^\/signup$/, handleSignupForm],
+    ['POST', /^\/signup$/, handleSignupSubmit],
+    ['POST', /^\/logout$/, handleLogout],
+    // 兼容旧地址：老书签和 README 里都是 /admin/login
     ['GET', /^\/admin\/login$/, handleLoginForm],
     ['POST', /^\/admin\/login$/, handleLoginSubmit],
     ['POST', /^\/admin\/logout$/, handleLogout],
+
+    // 车主：只看自己的车
+    ['GET', /^\/me$/, handleMyCars],
+    // 平台方：看全部
     ['GET', /^\/admin$/, handleAdminHome],
     ['GET', /^\/admin\/universal\.svg$/, handleUniversalQrSvg],
     ['GET', /^\/admin\/print-universal$/, handleUniversalPrint],
+
+    // 车辆相关：车主和平台方共用，权限在处理器里按归属判断
+    ['GET', /^\/print-all$/, handlePrintAll],
+    ['POST', /^\/cars$/, handleCreateCar],
+    ['POST', new RegExp(`^/cars/${ID}$`), handleUpdateCar],
+    ['POST', new RegExp(`^/cars/${ID}/delete$`), handleDeleteCar],
+    ['GET', new RegExp(`^/cars/${ID}/qr\\.svg$`), handleQrSvg],
+    ['GET', new RegExp(`^/cars/${ID}/print$`), handlePrint],
+    ['POST', /^\/messages\/(\d{1,12})\/read$/, handleMarkRead],
+    ['POST', /^\/messages\/read-all$/, handleMarkAllRead],
+
+    // 兼容旧地址（已经打印在纸上或存在书签里）
     ['GET', /^\/admin\/print-all$/, handlePrintAll],
     ['POST', /^\/admin\/cars$/, handleCreateCar],
     ['POST', new RegExp(`^/admin/cars/${ID}$`), handleUpdateCar],

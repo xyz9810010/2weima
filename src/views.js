@@ -147,22 +147,68 @@ function messagePage({ title, text, bodyHtml = '' }) {
 /* 车主后台                                                            */
 /* ------------------------------------------------------------------ */
 
-function loginPage({ error, configured = true, hint = '' }) {
-  const form = configured
-    ? `<form method="post" action="/admin/login" class="stack">
+/**
+ * 登录 / 注册。
+ *
+ * 登录表单里「账号」留空 = 平台方，用后台密码进；填了 = 车主账号。
+ * 一个页面两种身份，少一个入口少一份困惑。
+ */
+function loginPage({ mode = 'login', error = '', platformReady = true, hint = '' }) {
+  const isSignup = mode === 'signup';
+
+  const form = isSignup
+    ? `<form method="post" action="/signup" class="stack">
       <label class="field">
-        <span class="label">管理密码</span>
-        <input type="password" name="password" autocomplete="current-password" required autofocus>
+        <span class="label">手机号或邮箱</span>
+        <input type="text" name="contact" autocomplete="username" required autofocus
+          placeholder="13800138000 或 you@example.com">
+      </label>
+      <label class="field">
+        <span class="label">怎么称呼 <span class="hint-inline">选填</span></span>
+        <input type="text" name="name" maxlength="20" autocomplete="nickname" placeholder="张先生">
+      </label>
+      <label class="field">
+        <span class="label">设置密码 <span class="hint-inline">至少 8 位</span></span>
+        <input type="password" name="password" minlength="8" autocomplete="new-password" required>
+      </label>
+      <button class="btn btn-primary btn-block" type="submit">注册并开始使用</button>
+    </form>
+    <p class="hint center">
+      已经有账号？<a href="/login">直接登录</a>
+    </p>`
+    : `<form method="post" action="/login" class="stack">
+      <label class="field">
+        <span class="label">手机号或邮箱 <span class="hint-inline">车主填这里</span></span>
+        <input type="text" name="contact" autocomplete="username" autofocus
+          placeholder="13800138000 或 you@example.com">
+      </label>
+      <label class="field">
+        <span class="label">密码</span>
+        <input type="password" name="password" autocomplete="current-password" required>
       </label>
       <button class="btn btn-primary btn-block" type="submit">登录</button>
-    </form>`
-    : '<p class="muted">后台已锁定，配置好管理密码后刷新本页。</p>';
+    </form>
+    <p class="hint center">
+      还没有账号？<a href="/signup">注册一个</a>
+    </p>
+    ${
+      platformReady
+        ? `<p class="hint center">平台管理员：账号留空，直接填后台密码即可。</p>`
+        : `<p class="hint center">平台后台还没配置 <code>ADMIN_PASSWORD</code>。</p>`
+    }`;
 
   return layout({
-    title: '车主后台登录',
+    title: isSignup ? '注册 · 挪车码' : '登录 · 挪车码',
     body: `<main class="wrap wrap-narrow">
   <section class="card">
-    <h1 class="card-title">挪车码 · 车主后台</h1>
+    <h1 class="card-title">挪车码${isSignup ? ' · 注册' : ''}</h1>
+    <p class="muted">
+      ${
+        isSignup
+          ? '每个车主一个账号，只管理自己的车。'
+          : '车主用账号登录；平台管理员留空账号、填后台密码。'
+      }
+    </p>
     ${hint ? banner(hint, 'info') : ''}
     ${error ? banner(error) : ''}
     ${form}
@@ -212,7 +258,7 @@ function carForm(car, action, submitText) {
 </form>`;
 }
 
-function carCard(car, { baseUrl, qrSvg }) {
+function carCard(car, { baseUrl, qrSvg, ownerLabel }) {
   const scanUrl = `${baseUrl}/c/${car.id}`;
   return `<article class="car">
   <div class="car-head">
@@ -221,6 +267,7 @@ function carCard(car, { baseUrl, qrSvg }) {
       <div class="car-meta">
         编号 <code>${esc(car.id)}</code>
         <span class="dot">·</span>创建于 ${esc(fmtTime(car.created_at))}
+        ${ownerLabel ? `<span class="dot">·</span>${esc(ownerLabel)}` : ''}
       </div>
       <div class="car-perm">
         <b>编号和二维码是永久的</b>：换车牌、换号码、换到另一辆车上，
@@ -236,8 +283,8 @@ function carCard(car, { baseUrl, qrSvg }) {
       <p class="scan-url">${esc(scanUrl)}</p>
       <div class="btn-row">
         <a class="btn btn-sm btn-ghost" href="/c/${esc(car.id)}" target="_blank" rel="noreferrer">预览</a>
-        <a class="btn btn-sm btn-ghost" href="/admin/cars/${esc(car.id)}/print" target="_blank" rel="noreferrer">打印贴纸</a>
-        <a class="btn btn-sm btn-ghost" href="/admin/cars/${esc(car.id)}/qr.svg?download=1">下载 SVG</a>
+        <a class="btn btn-sm btn-ghost" href="/cars/${esc(car.id)}/print" target="_blank" rel="noreferrer">打印贴纸</a>
+        <a class="btn btn-sm btn-ghost" href="/cars/${esc(car.id)}/qr.svg?download=1">下载 SVG</a>
       </div>
       <p class="hint">
         ${
@@ -266,8 +313,8 @@ function carCard(car, { baseUrl, qrSvg }) {
 
   <details class="car-edit">
     <summary>编辑资料（换车牌 / 换号码 / 换车都改这里）</summary>
-    ${carForm(car, `/admin/cars/${car.id}`, '保存修改')}
-    <form method="post" action="/admin/cars/${esc(car.id)}/delete" class="danger-zone"
+    ${carForm(car, `/cars/${car.id}`, '保存修改')}
+    <form method="post" action="/cars/${esc(car.id)}/delete" class="danger-zone"
           data-confirm="确定删除车辆 ${esc(car.plate || car.id)}？该车的拨号记录也会一起删除。">
       <button class="btn btn-sm btn-danger" type="submit">删除该车辆</button>
     </form>
@@ -287,64 +334,66 @@ function callRow(record) {
   <div class="msg-content">有人点了一次「一键拨号」</div>
   <div class="msg-foot">
     <span class="muted">只记录次数与时间，不记录任何扫码人信息</span>
-    ${unread ? `<form method="post" action="/admin/messages/${esc(record.id)}/read"><button class="btn btn-xs btn-ghost" type="submit">标记已读</button></form>` : ''}
+    ${unread ? `<form method="post" action="/messages/${esc(record.id)}/read"><button class="btn btn-xs btn-ghost" type="submit">标记已读</button></form>` : ''}
   </div>
 </li>`;
 }
 
-function adminPage({ cars, messages, baseUrl, universal, unread, notice }) {
+function adminPage({ mode = 'admin', account = null, cars, messages, users = [], baseUrl, universal, unread, notice }) {
+  const isAdmin = mode === 'admin';
   const carSection = cars.length
-    ? cars.map((car) => carCard(car, { baseUrl, qrSvg: car.qrSvg })).join('\n')
-    : '<p class="muted">还没有车辆，先在上面添加一辆。</p>';
+    ? cars
+        .map((car) =>
+          carCard(car, {
+            baseUrl,
+            qrSvg: car.qrSvg,
+            ownerLabel: isAdmin && car.owner_contact ? `车主 ${car.owner_contact}` : '',
+          })
+        )
+        .join('\n')
+    : `<p class="muted">${isAdmin ? '还没有车辆，先在上面添加一辆。' : '还没有车辆，先添加一辆你的车。'}</p>`;
 
   const recordSection = messages.length
     ? `<ul class="msg-list">${messages.map(callRow).join('\n')}</ul>`
     : '<p class="muted">还没有人拨号。</p>';
 
-  // 通用码的说明随「启用了几辆车」而变，避免用户以为一个码能自动认出车
-  const universalHint =
-    universal.enabledCount === 0
-      ? '你现在没有启用中的车辆，这个码扫开会提示「暂时无法联系车主」。'
-      : universal.enabledCount === 1
-        ? `现在只启用了 1 辆车（${esc(universal.plates[0])}），扫码会直接进那一辆，扫码人不用做任何选择。`
-        : `你现在启用了 ${universal.enabledCount} 辆车（${universal.plates.map(esc).join('、')}）。
-           二维码本身分不出是哪辆，所以扫码页会先列出这些车牌，让扫码人点一下「是这辆」。`;
-
-  return layout({
-    title: '车主后台',
-    bodyClass: 'admin',
-    body: `<header class="topbar">
-  <div class="brand">挪车码 · 车主后台</div>
-  <div class="topbar-right">
-    <span class="badge ${unread ? 'badge-new' : 'badge-on'}">未读 ${unread}</span>
-    <form method="post" action="/admin/logout"><button class="btn btn-sm btn-ghost" type="submit">退出</button></form>
-  </div>
-</header>
-
-<main class="wrap">
-  ${notice ? banner(notice.text, notice.kind) : ''}
-
-  <section class="card">
-    <h2 class="card-title">新增车辆</h2>
-    ${carForm(null, '/admin/cars', '生成挪车码')}
-  </section>
-
-  <section class="card">
+  const userSection = !isAdmin
+    ? ''
+    : `<section class="card">
     <div class="card-head">
-      <h2 class="card-title">车辆与贴纸（${cars.length}）</h2>
-      ${cars.length ? '<a class="btn btn-sm btn-primary" href="/admin/print-all" target="_blank" rel="noreferrer">批量打印全部贴纸</a>' : ''}
+      <h2 class="card-title">车主账号（${users.length}）</h2>
     </div>
-    <p class="hint">
-      <b>一车一码</b>：每辆车有自己的码，扫码直接进那一辆，扫码人不用选。
-      点上面的按钮可以把所有车的贴纸排在一页里一次打完，每张贴纸都印着车牌，不会贴错。
-      改车牌、改号码都不用重新打印。
-    </p>
-    <div class="car-list">${carSection}</div>
-  </section>
+    <p class="hint">每个车主一个账号，只能看到和管理自己的车。</p>
+    ${
+      users.length
+        ? `<ul class="user-list">${users
+            .map(
+              (u) => `<li class="user-row">
+        <span class="user-contact">${esc(u.contact)}</span>
+        ${u.name ? `<span class="user-name">${esc(u.name)}</span>` : ''}
+        <span class="user-cars">${Number(u.car_count) || 0} 辆车</span>
+        <span class="user-time">${esc(fmtTime(u.created_at))}</span>
+      </li>`
+            )
+            .join('\n')}</ul>`
+        : '<p class="muted">还没有车主注册。</p>'
+    }
+  </section>`;
 
-  <section class="card card-universal">
+  // 通用码只对平台方有意义：它只认平台自己录的车（owner_id 为空）
+  const universalHint = !universal
+    ? ''
+    : universal.enabledCount === 0
+      ? '你现在没有启用中的自有车辆，这个码扫开会提示「暂时无法联系车主」。'
+      : universal.enabledCount === 1
+        ? `现在只启用了 1 辆（${esc(universal.plates[0])}），扫码会直接进那一辆。`
+        : `你现在启用了 ${universal.enabledCount} 辆自有车（${universal.plates.map(esc).join('、')}），扫码页会先列出这些车牌让扫码人点。`;
+
+  const universalSection = !universal
+    ? ''
+    : `<section class="card card-universal">
     <div class="card-head">
-      <h2 class="card-title">通用二维码（备用）</h2>
+      <h2 class="card-title">通用二维码（平台自有车用）</h2>
       <span class="badge badge-call">一张贴纸贴所有车</span>
     </div>
     <div class="car-body">
@@ -358,21 +407,70 @@ function adminPage({ cars, messages, baseUrl, universal, unread, notice }) {
         </div>
         <p class="hint">${universalHint}</p>
         <p class="hint">
-          它的好处是「先印一批一样的备用」；代价是扫码时分不出是哪辆车。
-          想让扫码结果直接对上车辆，请用上面每辆车自己的一车一码。
+          它只认 <b>owner_id 为空</b>的自有车，不会影响车主的车。车主想让扫码直接对上车辆，用自己的专属码。
         </p>
       </div>
     </div>
+  </section>`;
+
+  return layout({
+    title: isAdmin ? '平台后台' : '我的车辆',
+    bodyClass: 'admin',
+    body: `<header class="topbar">
+  <div class="brand">挪车码 · ${isAdmin ? '平台后台' : '我的车辆'}</div>
+  <div class="topbar-right">
+    <span class="badge ${unread ? 'badge-new' : 'badge-on'}">未读 ${unread}</span>
+    <form method="post" action="/logout"><button class="btn btn-sm btn-ghost" type="submit">退出</button></form>
+  </div>
+</header>
+
+<main class="wrap">
+  ${notice ? banner(notice.text, notice.kind) : ''}
+  ${
+    isAdmin
+      ? `<section class="card">
+    <h2 class="card-title">平台控制台</h2>
+    <p class="muted">你是平台管理员：这里的「新增车辆」建出来的是<b>平台自有车</b>（owner_id 为空），
+      在车主账号里看不到；通用码也只认这些车。</p>
+    <p class="hint">车主各自注册账号后，在「我的车辆」里自己建车、自己打印贴纸。</p>
+  </section>`
+      : `<section class="card">
+    <h2 class="card-title">我的账号</h2>
+    <p class="muted">${esc((account && account.contact) || '')}${account && account.name ? ` · ${esc(account.name)}` : ''}</p>
+    <p class="hint">你只能看到和管理自己的车。</p>
+  </section>`
+  }
+
+  <section class="card">
+    <h2 class="card-title">新增车辆</h2>
+    ${carForm(null, '/cars', '生成挪车码')}
   </section>
 
   <section class="card">
     <div class="card-head">
+      <h2 class="card-title">车辆与贴纸（${cars.length}）</h2>
+      ${cars.length ? `<a class="btn btn-sm btn-primary" href="/print-all" target="_blank" rel="noreferrer">批量打印全部贴纸</a>` : ''}
+    </div>
+    <p class="hint">
+      <b>一车一码</b>：每辆车有自己的码，扫码直接进那一辆，扫码人不用选。
+      批量打印会把所有车的贴纸排在一页里一次打完。
+      改车牌、改号码都不用重新打印。
+    </p>
+    <div class="car-list">${carSection}</div>
+  </section>
+
+  ${universalSection}
+
+  <section class="card">
+    <div class="card-head">
       <h2 class="card-title">拨号记录</h2>
-      ${unread ? '<form method="post" action="/admin/messages/read-all"><button class="btn btn-sm btn-ghost" type="submit">全部标记已读</button></form>' : ''}
+      ${unread ? `<form method="post" action="/messages/read-all"><button class="btn btn-sm btn-ghost" type="submit">全部标记已读</button></form>` : ''}
     </div>
     <p class="hint">这里只记「有人点了一次拨号按钮」，不记录扫码人的 IP、设备信息，也不记录通话内容与号码。</p>
     ${recordSection}
   </section>
+
+  ${userSection}
 </main>`,
   });
 }

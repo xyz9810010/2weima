@@ -45,16 +45,31 @@ function createStore(dataDir) {
     setSettingIfAbsent: db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)'),
 
     listCars: db.prepare('SELECT * FROM cars ORDER BY created_at DESC'),
+    listCarsByOwner: db.prepare('SELECT * FROM cars WHERE owner_id = ? ORDER BY created_at DESC'),
     getCar: db.prepare('SELECT * FROM cars WHERE id = ?'),
     insertCar: db.prepare(`
-      INSERT INTO cars (id, plate, owner_name, phone, call_number, note, enabled, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO cars (id, owner_id, plate, owner_name, phone, call_number, note, enabled, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     updateCar: db.prepare(`
       UPDATE cars SET plate = ?, owner_name = ?, phone = ?, call_number = ?, note = ?, enabled = ?, updated_at = ?
       WHERE id = ?
     `),
+    setCarOwner: db.prepare('UPDATE cars SET owner_id = ?, updated_at = ? WHERE id = ?'),
     deleteCar: db.prepare('DELETE FROM cars WHERE id = ?'),
+
+    insertUser: db.prepare(`
+      INSERT INTO users (id, contact, name, password_hash, role, disabled, created_at)
+      VALUES (?, ?, ?, ?, ?, 0, ?)
+    `),
+    getUser: db.prepare('SELECT * FROM users WHERE id = ?'),
+    getUserByContact: db.prepare('SELECT * FROM users WHERE contact = ?'),
+    listUsers: db.prepare(`
+      SELECT users.*, (SELECT COUNT(*) FROM cars WHERE cars.owner_id = users.id) AS car_count
+      FROM users ORDER BY users.created_at DESC
+    `),
+    countUsers: db.prepare('SELECT COUNT(*) AS n FROM users'),
+    setUserPassword: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
 
     insertCallLog: db.prepare(`
       INSERT INTO messages (car_id, kind, reason, content, contact, created_at)
@@ -67,6 +82,27 @@ function createStore(dataDir) {
       LIMIT ?
     `),
     countUnread: db.prepare('SELECT COUNT(*) AS n FROM messages WHERE read_at IS NULL'),
+    listMessagesByOwner: db.prepare(`
+      SELECT messages.*, cars.plate AS plate
+      FROM messages JOIN cars ON cars.id = messages.car_id
+      WHERE cars.owner_id = ?
+      ORDER BY messages.created_at DESC
+      LIMIT ?
+    `),
+    countUnreadByOwner: db.prepare(`
+      SELECT COUNT(*) AS n
+      FROM messages JOIN cars ON cars.id = messages.car_id
+      WHERE cars.owner_id = ? AND messages.read_at IS NULL
+    `),
+    markReadByOwner: db.prepare(`
+      UPDATE messages SET read_at = ?
+      WHERE id = ? AND read_at IS NULL
+        AND car_id IN (SELECT id FROM cars WHERE owner_id = ?)
+    `),
+    markAllReadByOwner: db.prepare(`
+      UPDATE messages SET read_at = ?
+      WHERE read_at IS NULL AND car_id IN (SELECT id FROM cars WHERE owner_id = ?)
+    `),
     markRead: db.prepare('UPDATE messages SET read_at = ? WHERE id = ? AND read_at IS NULL'),
     markAllRead: db.prepare('UPDATE messages SET read_at = ? WHERE read_at IS NULL'),
   };
@@ -114,6 +150,10 @@ function createStore(dataDir) {
       return stmt.listCars.all();
     },
 
+    async listCarsByOwner(ownerId) {
+      return stmt.listCarsByOwner.all(String(ownerId));
+    },
+
     async getCar(id) {
       return stmt.getCar.get(String(id)) || null;
     },
@@ -122,6 +162,7 @@ function createStore(dataDir) {
       const now = Date.now();
       stmt.insertCar.run(
         car.id,
+        car.owner_id || null,
         car.plate || '',
         car.owner_name || '',
         car.phone || '',
@@ -132,6 +173,10 @@ function createStore(dataDir) {
         now
       );
       return stmt.getCar.get(car.id) || null;
+    },
+
+    async setCarOwner(id, ownerId) {
+      return stmt.setCarOwner.run(ownerId || null, Date.now(), String(id)).changes > 0;
     },
 
     async updateCar(id, fields) {
@@ -152,6 +197,41 @@ function createStore(dataDir) {
       return stmt.deleteCar.run(String(id)).changes > 0;
     },
 
+    /* ------------------------------ 账号 ------------------------------ */
+
+    async createUser(user) {
+      stmt.insertUser.run(
+        user.id,
+        user.contact,
+        user.name || '',
+        user.password_hash,
+        user.role === 'admin' ? 'admin' : 'owner',
+        Date.now()
+      );
+      return stmt.getUser.get(user.id) || null;
+    },
+
+    async getUser(id) {
+      return stmt.getUser.get(String(id)) || null;
+    },
+
+    async getUserByContact(contact) {
+      return stmt.getUserByContact.get(String(contact)) || null;
+    },
+
+    async listUsers() {
+      return stmt.listUsers.all();
+    },
+
+    async countUsers() {
+      const row = stmt.countUsers.get();
+      return row ? Number(row.n) : 0;
+    },
+
+    async setUserPassword(id, passwordHash) {
+      return stmt.setUserPassword.run(String(passwordHash), String(id)).changes > 0;
+    },
+
     async addCallLog(carId) {
       const info = stmt.insertCallLog.run(String(carId), 'call', '', '', '', Date.now());
       return Number(info.lastInsertRowid);
@@ -166,11 +246,22 @@ function createStore(dataDir) {
       return row ? Number(row.n) : 0;
     },
 
-    async markRead(id) {
+    async listMessagesByOwner(ownerId, limit) {
+      return stmt.listMessagesByOwner.all(String(ownerId), Number(limit) || 100);
+    },
+
+    async countUnreadByOwner(ownerId) {
+      const row = stmt.countUnreadByOwner.get(String(ownerId));
+      return row ? Number(row.n) : 0;
+    },
+
+    async markRead(id, ownerId) {
+      if (ownerId) return stmt.markReadByOwner.run(Date.now(), Number(id), String(ownerId)).changes > 0;
       return stmt.markRead.run(Date.now(), Number(id)).changes > 0;
     },
 
-    async markAllRead() {
+    async markAllRead(ownerId) {
+      if (ownerId) return stmt.markAllReadByOwner.run(Date.now(), String(ownerId)).changes;
       return stmt.markAllRead.run(Date.now()).changes;
     },
 

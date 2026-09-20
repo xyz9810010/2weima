@@ -129,7 +129,8 @@ async function run() {
     check('根路径是扫码方页面，不再跳后台', root.location === '', root.location);
     check('还没建车时根路径给出人话提示', root.status === 404 && root.text.includes('暂时无法联系车主'), root.status);
   }
-  check('未登录访问 /admin 跳登录页', (await get('/admin')).location === '/admin/login');
+  check('未登录访问 /admin 跳登录页', (await get('/admin')).location === '/login');
+  check('未登录访问 /me 跳登录页', (await get('/me')).location === '/login');
 
   const loginPage = await get('/admin/login');
   check('登录页 = 200', loginPage.status === 200 && loginPage.text.includes('name="password"'));
@@ -435,10 +436,112 @@ async function run() {
     check('全部删掉后根路径又给出提示', (await get('/')).status === 404);
   }
 
-  section('9. 会话与越权');
-  check('登出 = 302', (await post('/admin/logout')).location === '/admin/login');
-  check('登出后后台跳登录页', (await get('/admin')).location === '/admin/login');
-  const anon = await post('/admin/cars', { plate: '伪造' }, { auth: false });
+  section('9. 多租户：每个车主一个账号，互相看不见');
+  {
+    // 独立 Cookie jar 的客户端，模拟两个不同的车主
+    function newClient() {
+      let jar = '';
+      const call = async (method, path, form) => {
+        const headers = {};
+        if (jar) headers.cookie = jar;
+        let body;
+        if (form) {
+          body = new URLSearchParams(form).toString();
+          headers['content-type'] = 'application/x-www-form-urlencoded';
+        }
+        const res = await fetch(BASE + path, { method, headers, body, redirect: 'manual' });
+        for (const raw of (res.headers.getSetCookie ? res.headers.getSetCookie() : [])) {
+          if (!/;\s*Secure/i.test(raw)) jar = raw.split(';')[0];
+        }
+        return { status: res.status, location: res.headers.get('location') || '', text: await res.text() };
+      };
+      return { get: (p) => call('GET', p), post: (p, f) => call('POST', p, f) };
+    }
+
+    const a = newClient();
+    const b = newClient();
+
+    const signupPage = await a.get('/signup');
+    check('注册页可访问', signupPage.status === 200 && signupPage.text.includes('name="contact"'), signupPage.status);
+
+    const wrongContact = await a.post('/signup', { contact: '不是手机号', password: 'password123' });
+    check('联系方式不合法被拒', wrongContact.status === 400, wrongContact.status);
+    const shortPw = await a.post('/signup', { contact: '13800000001', password: 'short' });
+    check('密码太短被拒', shortPw.status === 400, shortPw.status);
+
+    const signupA = await a.post('/signup', { contact: '13800000001', name: '车主甲', password: 'password-aaa' });
+    check('车主甲注册成功 → /me', signupA.status === 302 && signupA.location === '/me', signupA.location);
+    const dup = await b.post('/signup', { contact: '13800000001', password: 'password-bbb' });
+    check('同一手机号不能重复注册', dup.status === 409, dup.status);
+
+    const signupB = await b.post('/signup', { contact: '13800000002', name: '车主乙', password: 'password-bbb' });
+    check('车主乙注册成功 → /me', signupB.status === 302 && signupB.location === '/me', signupB.location);
+
+    const meA1 = await a.get('/me');
+    check('车主甲的「我的车辆」= 200', meA1.status === 200, meA1.status);
+    check('车主甲能新增车辆', meA1.text.includes('/cars'), meA1.status);
+    check('车主后台没有通用码板块', !meA1.text.includes('通用二维码'), '多租户不该有平台级功能');
+    check('车主后台没有车主账号列表', !meA1.text.includes('车主账号'), '看到了平台功能');
+
+    const createA = await a.post('/cars', {
+      plate: '甲A·11111', owner_name: '甲', phone: '13800000001', call_number: '', note: '', enabled: 'on',
+    });
+    check('车主甲建车成功', createA.status === 302 && createA.location.includes('notice=created'), createA.location);
+    const createB = await b.post('/cars', {
+      plate: '乙B·22222', owner_name: '乙', phone: '13800000002', call_number: '', note: '', enabled: 'on',
+    });
+    check('车主乙建车成功', createB.status === 302, createB.location);
+
+    const meA2 = await a.get('/me');
+    const meB2 = await b.get('/me');
+    check('车主甲只看到自己的车', meA2.text.includes('甲A·11111') && !meA2.text.includes('乙B·22222'), '串号了');
+    check('车主乙只看到自己的车', meB2.text.includes('乙B·22222') && !meB2.text.includes('甲A·11111'), '串号了');
+
+    const codeA = (meA2.text.match(/\/c\/([A-Za-z0-9_-]{10})/) || [])[1];
+    check('拿到车主甲的车牌编号 ' + codeA, Boolean(codeA));
+
+    if (codeA) {
+      check('【隔离】乙不能改甲的车', (await b.post(`/cars/${codeA}`, { plate: '被改了', enabled: 'on' })).status === 404);
+      check('【隔离】乙不能删甲的车', (await b.post(`/cars/${codeA}/delete`)).status === 404);
+      check('【隔离】乙不能下甲车的二维码', (await b.get(`/cars/${codeA}/qr.svg`)).status === 404);
+      check('【隔离】乙不能打甲车的贴纸', (await b.get(`/cars/${codeA}/print`)).status === 404);
+      const stillMine = await a.get('/me');
+      check('甲的车没被改动', stillMine.text.includes('甲A·11111') && !stillMine.text.includes('被改了'));
+
+      // 通用码（根路径）绝不能把车主的车列出来
+      const rootAfter = await get('/', { auth: false });
+      check('【隐私】通用码不暴露车主的车', !rootAfter.text.includes('甲A·11111') && !rootAfter.text.includes('乙B·22222'), '车主的车牌被公开了！');
+    }
+
+    // 平台方看得到全部 + 账号列表
+    const adminRow = await get('/admin');
+    check('平台方能看到两辆车', adminRow.text.includes('甲A·11111') && adminRow.text.includes('乙B·22222'));
+    check('平台方能标出车主', adminRow.text.includes('车主 13800000001'));
+    check('平台方有车主账号列表', adminRow.text.includes('车主账号（2）'), '没有账号列表');
+
+    // 登录：正确 / 错误 / 账号不存在
+    const fresh = newClient();
+    check('错误密码 = 401', (await fresh.post('/login', { contact: '13800000001', password: 'wrong-pass' })).status === 401);
+    check('不存在的账号 = 401', (await fresh.post('/login', { contact: '13900009999', password: 'whatever1' })).status === 401);
+    const loginA = await fresh.post('/login', { contact: '13800000001', password: 'password-aaa' });
+    check('车主用账号密码能登录', loginA.status === 302 && loginA.location === '/me', loginA.location);
+    check('登录后能看到自己的车', (await fresh.get('/me')).text.includes('甲A·11111'));
+
+    // 清掉这两辆测试车
+    const aRow = await a.get('/me');
+    for (const c of [...new Set((aRow.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)))]) {
+      await a.post(`/cars/${c}/delete`);
+    }
+    const bRow = await b.get('/me');
+    for (const c of [...new Set((bRow.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)))]) {
+      await b.post(`/cars/${c}/delete`);
+    }
+  }
+
+  section('10. 会话与越权');
+  check('登出 = 302', (await post('/logout')).location === '/login');
+  check('登出后后台跳登录页', (await get('/admin')).location === '/login');
+  const anon = await post('/cars', { plate: '伪造' }, { auth: false });
   check('未登录建车被拒（302 登录页）', anon.status === 302, anon.status);
 }
 

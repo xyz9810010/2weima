@@ -37,6 +37,9 @@ function getApp(env) {
 
 async function buildApp(env) {
   core.setTimeZoneOffset(env.TZ_OFFSET_HOURS);
+  // 免费版每次请求只有 10ms CPU，PBKDF2 迭代次数开太高会直接 1102 超时。
+  // 迭代次数写在哈希串里，所以以后调高不影响已注册的账号。
+  core.setPasswordIterations(env.PBKDF2_ITERATIONS);
 
   const store = createStore(env.DB);
 

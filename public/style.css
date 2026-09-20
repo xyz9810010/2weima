@@ -724,6 +724,46 @@ textarea:focus {
   word-break: break-all;
 }
 
+/* 平台后台里的车主账号列表 */
+
+.user-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.user-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eef1f6;
+  font-size: 13px;
+}
+
+.user-row:last-child {
+  border-bottom: 0;
+}
+
+.user-contact {
+  font-weight: 600;
+}
+
+.user-name {
+  color: #6b7280;
+}
+
+.user-cars {
+  margin-left: auto;
+  color: #2563eb;
+}
+
+.user-time {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
 .sticker-url {
   font-size: 7pt;
   color: #777;

@@ -139,6 +139,84 @@ function base64Url(bytes) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+function base64UrlToBytes(text) {
+  const padded = String(text).replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+/* ------------------------- 账号密码（PBKDF2） ------------------------ */
+
+/**
+ * 跨平台的密码哈希：用 WebCrypto 的 PBKDF2-SHA256。
+ *
+ * 为什么不用 scrypt / argon2：Cloudflare Workers 上没有 Node 的 crypto，
+ * 而账号体系是两边共用的核心逻辑。PBKDF2 是唯一两边都有、且行为一致的 KDF。
+ *
+ * ⚠️ 迭代次数是算力成本：Workers 免费版每次请求只有 10ms CPU，
+ * 迭代次数开高了会直接 1102 超时。这个值是按「免费版能跑」调的，
+ * 商业上要更安全（OWASP 建议 600k）就得升级 Workers Paid。
+ */
+const PBKDF2_ITERATIONS = 50000;
+
+/** 由各平台入口在启动时覆盖（Workers 免费版 CPU 只有 10ms，可能要调低） */
+let pbkdf2Iterations = PBKDF2_ITERATIONS;
+
+function setPasswordIterations(value) {
+  const n = Number(value);
+  if (Number.isFinite(n) && n >= 1000 && n <= 1000000) pbkdf2Iterations = Math.floor(n);
+}
+
+async function pbkdf2(password, salt, iterations) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(String(password)),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
+    key,
+    256
+  );
+  return new Uint8Array(bits);
+}
+
+async function hashPassword(password, iterations = pbkdf2Iterations) {
+  const salt = new Uint8Array(16);
+  crypto.getRandomValues(salt);
+  const hash = await pbkdf2(password, salt, iterations);
+  return `pbkdf2$${iterations}$${base64Url(salt)}$${base64Url(hash)}`;
+}
+
+/** 只认新格式；旧格式（scrypt）一律当作无效，让调用方重新生成 */
+function isSupportedHash(stored) {
+  const parts = String(stored || '').split('$');
+  return parts.length === 4 && parts[0] === 'pbkdf2';
+}
+
+async function verifyPassword(password, stored) {
+  const parts = String(stored || '').split('$');
+  if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
+
+  const iterations = Number(parts[1]);
+  if (!Number.isFinite(iterations) || iterations < 1000 || iterations > 1000000) return false;
+
+  let salt;
+  try {
+    salt = base64UrlToBytes(parts[2]);
+  } catch {
+    return false;
+  }
+  if (!salt.length) return false;
+
+  const hash = await pbkdf2(password, salt, iterations);
+  return timingSafeEqualStr(base64Url(hash), parts[3]);
+}
+
 async function hmacBase64Url(payload, secret) {
   const key = await crypto.subtle.importKey(
     'raw',
@@ -196,6 +274,11 @@ module.exports = {
   randomHex,
   timingSafeEqualStr,
   hmacBase64Url,
+  hashPassword,
+  verifyPassword,
+  isSupportedHash,
+  PBKDF2_ITERATIONS,
+  setPasswordIterations,
   signValue,
   unsignValue,
   resolveSessionSecret,

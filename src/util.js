@@ -4,12 +4,11 @@
  * Node 适配层专用工具。
  *
  * 共享层（src/core.js）不用这里的任何东西；这里只处理
- * 「Node 独有的东西」：读 socket 里的请求体、scrypt 口令、转发头。
+ * 「Node 独有的东西」：读 socket 里的请求体、转发头。
  *
- * Cloudflare Workers 里没有这些（也没有 scrypt），对应实现见 src/worker.js。
+ * 注意：**密码哈希不在这里**。它必须两边都跑（账号体系是共用的），
+ * 所以用 WebCrypto 实现，放在 src/core.js。Node 的 scrypt 在 Workers 上没有。
  */
-
-const crypto = require('node:crypto');
 
 /* ---------------------------- 请求体读取 ---------------------------- */
 
@@ -30,31 +29,6 @@ function readBody(req, limit = 16 * 1024) {
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
-}
-
-/* ------------------------------ 口令 ------------------------------- */
-
-function hashPassword(password) {
-  const salt = crypto.randomBytes(16);
-  const derived = crypto.scryptSync(String(password), salt, 32);
-  return `scrypt$${salt.toString('hex')}$${derived.toString('hex')}`;
-}
-
-function verifyPassword(password, stored) {
-  const parts = String(stored || '').split('$');
-  if (parts.length !== 3 || parts[0] !== 'scrypt') return false;
-
-  const salt = Buffer.from(parts[1], 'hex');
-  const expected = Buffer.from(parts[2], 'hex');
-  if (!salt.length || !expected.length) return false;
-
-  let derived;
-  try {
-    derived = crypto.scryptSync(String(password), salt, expected.length);
-  } catch {
-    return false;
-  }
-  return derived.length === expected.length && crypto.timingSafeEqual(derived, expected);
 }
 
 /* ------------------------------ 请求头 ------------------------------ */
@@ -83,8 +57,6 @@ function clientIp(req, headers, trustProxy) {
 
 module.exports = {
   readBody,
-  hashPassword,
-  verifyPassword,
   normalizeHeaders,
   clientIp,
 };

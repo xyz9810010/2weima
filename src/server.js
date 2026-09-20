@@ -100,20 +100,22 @@ async function bootstrapAdminPassword(store) {
   const fromEnv = process.env.ADMIN_PASSWORD;
   if (fromEnv) {
     const stored = await store.getSetting('admin_password');
-    if (!util.verifyPassword(fromEnv, stored || '')) {
-      await store.setSetting('admin_password', util.hashPassword(fromEnv));
+    if (!(await core.verifyPassword(fromEnv, stored || ''))) {
+      await store.setSetting('admin_password', await core.hashPassword(fromEnv));
       console.log('[初始化] 已按 ADMIN_PASSWORD 环境变量写入管理密码。');
     }
     return { hint: '' };
   }
 
-  if (await store.getSetting('admin_password')) return { hint: '' };
+  const stored = await store.getSetting('admin_password');
+  // 旧版本用 scrypt 存过哈希，格式已经不认了 —— 当作没有，重新生成并打印
+  if (stored && core.isSupportedHash(stored)) return { hint: '' };
 
   const generated = core.randomHex(8); // 16 位十六进制，方便照抄
-  await store.setSetting('admin_password', util.hashPassword(generated));
+  await store.setSetting('admin_password', await core.hashPassword(generated));
   console.log('');
   console.log('=========================================================');
-  console.log('  首次启动，已生成车主后台管理密码：');
+  console.log('  首次启动，已生成平台后台管理密码：');
   console.log(`      ${generated}`);
   console.log('  请立刻登录并妥善保存；想固定密码就设置 ADMIN_PASSWORD 后重启。');
   console.log('=========================================================');
@@ -125,6 +127,7 @@ async function bootstrapAdminPassword(store) {
 
 async function main() {
   core.setTimeZoneOffset(process.env.TZ_OFFSET_HOURS);
+  core.setPasswordIterations(process.env.PBKDF2_ITERATIONS);
 
   const store = createStore(process.env.DATA_DIR);
   const sessionSecret = await core.resolveSessionSecret(store, process.env.SESSION_SECRET);
@@ -136,7 +139,7 @@ async function main() {
       isConfigured: true,
       hint: admin.hint,
       verify: async (password) =>
-        util.verifyPassword(password, (await store.getSetting('admin_password')) || ''),
+        core.verifyPassword(password, (await store.getSetting('admin_password')) || ''),
     },
     publicBaseUrl: PUBLIC_BASE_URL,
     sessionSecret,

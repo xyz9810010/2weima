@@ -8,8 +8,25 @@
 --   - 不要加 PRAGMA（D1 不允许改 journal_mode / foreign_keys）
 --   - 刻意不用 STRICT 表（D1 的 SQLite 版本支持情况随环境而变，而这里所有写入都过我们自己的代码）
 
+-- 车主账号。
+-- 每个车主一个账号，只能看到和管理自己的车。
+-- contact 用手机号或邮箱，二选一即可（同一字段，登录时凭它找账号）。
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT PRIMARY KEY,
+  contact       TEXT NOT NULL,
+  name          TEXT NOT NULL DEFAULT '',
+  password_hash TEXT NOT NULL,
+  role          TEXT NOT NULL DEFAULT 'owner',   -- owner = 车主；admin = 平台方
+  disabled      INTEGER NOT NULL DEFAULT 0,
+  created_at    INTEGER NOT NULL
+);
+
+-- 登录靠 contact 查找，所以要唯一；同时它也是防重复注册的关键
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_contact ON users (contact);
+
 CREATE TABLE IF NOT EXISTS cars (
   id          TEXT PRIMARY KEY,
+  owner_id    TEXT REFERENCES users(id) ON DELETE SET NULL,  -- 空 = 平台方自己录的车
   plate       TEXT NOT NULL DEFAULT '',
   owner_name  TEXT NOT NULL DEFAULT '',
   phone       TEXT NOT NULL DEFAULT '',
@@ -19,6 +36,8 @@ CREATE TABLE IF NOT EXISTS cars (
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_cars_owner ON cars (owner_id, created_at DESC);
 
 -- 拨号记录。
 -- 表名 messages 是历史遗留（早期版本这里存扫码人的留言），现在一行 = 一次拨号打点。

@@ -62,6 +62,10 @@ function createStore(db) {
       return all('SELECT * FROM cars ORDER BY created_at DESC');
     },
 
+    async listCarsByOwner(ownerId) {
+      return all('SELECT * FROM cars WHERE owner_id = ? ORDER BY created_at DESC', String(ownerId));
+    },
+
     async getCar(id) {
       return first('SELECT * FROM cars WHERE id = ?', String(id));
     },
@@ -69,9 +73,10 @@ function createStore(db) {
     async createCar(car) {
       const now = Date.now();
       await run(
-        `INSERT INTO cars (id, plate, owner_name, phone, call_number, note, enabled, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO cars (id, owner_id, plate, owner_name, phone, call_number, note, enabled, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         car.id,
+        car.owner_id || null,
         car.plate || '',
         car.owner_name || '',
         car.phone || '',
@@ -82,6 +87,11 @@ function createStore(db) {
         now
       );
       return first('SELECT * FROM cars WHERE id = ?', car.id);
+    },
+
+    async setCarOwner(id, ownerId) {
+      const result = await run('UPDATE cars SET owner_id = ?, updated_at = ? WHERE id = ?', ownerId || null, Date.now(), String(id));
+      return Boolean(result.meta && result.meta.changes);
     },
 
     async updateCar(id, fields) {
@@ -102,6 +112,47 @@ function createStore(db) {
 
     async deleteCar(id) {
       const result = await run('DELETE FROM cars WHERE id = ?', String(id));
+      return Boolean(result.meta && result.meta.changes);
+    },
+
+    /* ------------------------------ 账号 ------------------------------ */
+
+    async createUser(user) {
+      await run(
+        `INSERT INTO users (id, contact, name, password_hash, role, disabled, created_at)
+         VALUES (?, ?, ?, ?, ?, 0, ?)`,
+        user.id,
+        user.contact,
+        user.name || '',
+        user.password_hash,
+        user.role === 'admin' ? 'admin' : 'owner',
+        Date.now()
+      );
+      return first('SELECT * FROM users WHERE id = ?', user.id);
+    },
+
+    async getUser(id) {
+      return first('SELECT * FROM users WHERE id = ?', String(id));
+    },
+
+    async getUserByContact(contact) {
+      return first('SELECT * FROM users WHERE contact = ?', String(contact));
+    },
+
+    async listUsers() {
+      return all(
+        `SELECT users.*, (SELECT COUNT(*) FROM cars WHERE cars.owner_id = users.id) AS car_count
+         FROM users ORDER BY users.created_at DESC`
+      );
+    },
+
+    async countUsers() {
+      const row = await first('SELECT COUNT(*) AS n FROM users');
+      return row ? Number(row.n) : 0;
+    },
+
+    async setUserPassword(id, passwordHash) {
+      const result = await run('UPDATE users SET password_hash = ? WHERE id = ?', String(passwordHash), String(id));
       return Boolean(result.meta && result.meta.changes);
     },
 
@@ -134,17 +185,51 @@ function createStore(db) {
       return row ? Number(row.n) : 0;
     },
 
-    async markRead(id) {
-      const result = await run(
-        'UPDATE messages SET read_at = ? WHERE id = ? AND read_at IS NULL',
-        Date.now(),
-        Number(id)
+    async listMessagesByOwner(ownerId, limit) {
+      return all(
+        `SELECT messages.*, cars.plate AS plate
+         FROM messages JOIN cars ON cars.id = messages.car_id
+         WHERE cars.owner_id = ?
+         ORDER BY messages.created_at DESC
+         LIMIT ?`,
+        String(ownerId),
+        Number(limit) || 100
       );
+    },
+
+    async countUnreadByOwner(ownerId) {
+      const row = await first(
+        `SELECT COUNT(*) AS n
+         FROM messages JOIN cars ON cars.id = messages.car_id
+         WHERE cars.owner_id = ? AND messages.read_at IS NULL`,
+        String(ownerId)
+      );
+      return row ? Number(row.n) : 0;
+    },
+
+    async markRead(id, ownerId) {
+      const result = ownerId
+        ? await run(
+            `UPDATE messages SET read_at = ?
+             WHERE id = ? AND read_at IS NULL
+               AND car_id IN (SELECT id FROM cars WHERE owner_id = ?)`,
+            Date.now(),
+            Number(id),
+            String(ownerId)
+          )
+        : await run('UPDATE messages SET read_at = ? WHERE id = ? AND read_at IS NULL', Date.now(), Number(id));
       return Boolean(result.meta && result.meta.changes);
     },
 
-    async markAllRead() {
-      const result = await run('UPDATE messages SET read_at = ? WHERE read_at IS NULL', Date.now());
+    async markAllRead(ownerId) {
+      const result = ownerId
+        ? await run(
+            `UPDATE messages SET read_at = ?
+             WHERE read_at IS NULL AND car_id IN (SELECT id FROM cars WHERE owner_id = ?)`,
+            Date.now(),
+            String(ownerId)
+          )
+        : await run('UPDATE messages SET read_at = ? WHERE read_at IS NULL', Date.now());
       return result.meta ? Number(result.meta.changes) : 0;
     },
 
