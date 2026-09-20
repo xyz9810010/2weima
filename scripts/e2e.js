@@ -605,7 +605,69 @@ async function run() {
     check('平台方可以一键清理空白车辆', cleaned.location.includes('notice=cleaned'), cleaned.location);
   }
 
-  section('12. UI/UX 基础（可访问性 / 触控 / 图标）');
+  section('12. 车牌结构化输入（省 + 字母 + 号码）');
+  {
+    const form = await get('/admin');
+    check('表单有省份下拉', form.text.includes('name="plate_province"') && form.text.includes('>浙<'));
+    check('表单有城市字母下拉', form.text.includes('name="plate_city"'));
+    check('表单有号码输入框', form.text.includes('name="plate_rest"'));
+    check('有特殊车牌兜底入口', form.text.includes('name="plate"'));
+
+    // 车牌字母不含 I 和 O（跟 1、0 会看混）
+    const citySelect = (form.text.match(/<select name="plate_city"[\s\S]*?<\/select>/) || [''])[0];
+    const letters = [...citySelect.matchAll(/<option value="([A-Z])"/g)].map((m) => m[1]);
+    check('字母选项不含 I / O', letters.length >= 24 && !letters.includes('I') && !letters.includes('O'), letters.join(''));
+
+    // 三段拼成标准写法，且小写会被规范化
+    // （用 粤B·9X8K6 而不是例子里的 浙G·5RT71 —— 后者在占位提示里也出现过，会让文本查找撞车）
+    const created = await post('/cars', {
+      plate_province: '粤', plate_city: 'b', plate_rest: '9x8k6',
+      owner_name: '', phone: '', call_number: '13800138000', note: '', enabled: 'on',
+    });
+    check('结构化建车成功', created.location.includes('notice=created'), created.location);
+
+    const list = await get('/admin');
+    check('自动排版成 粤B·9X8K6（转大写）', list.text.includes('粤B·9X8K6'), '没排版');
+    const card =
+      list.text
+        .split('<article class="car">')
+        .slice(1)
+        .find((c) => c.includes('粤B·9X8K6')) || '';
+    const code = (card.match(/\/c\/([A-Za-z0-9_-]{10})/) || [])[1];
+    check('拿到编号 ' + code, Boolean(code), code);
+
+    if (code) {
+      const scan = await get(`/c/${code}`);
+      check('扫码页显示排版后的车牌', scan.text.includes('粤B·9X8K6'));
+
+      // 再进来时要把车牌拆回三个控件
+      const again = await get('/admin');
+      check('编辑时回填省份', /<option value="粤" selected/.test(again.text), '省份没回填');
+      check('编辑时回填字母', /<option value="B" selected/.test(again.text), '字母没回填');
+      check('编辑时回填号码', again.text.includes('value="9X8K6"'), '号码没回填');
+
+      // 特殊车牌走原样
+      const special = await post(`/cars/${code}`, {
+        plate_province: '', plate_city: '', plate_rest: '', plate: '使123456',
+        owner_name: '', phone: '', call_number: '13800138000', note: '', enabled: 'on',
+      });
+      check('特殊车牌原样保存', special.location.includes('notice=updated'), special.location);
+      check('后台显示 使123456', (await get('/admin')).text.includes('使123456'));
+
+      // 三段填全时优先用三段，忽略原样框
+      await post(`/cars/${code}`, {
+        plate_province: '沪', plate_city: 'A', plate_rest: '12345', plate: '乱写的',
+        owner_name: '', phone: '', call_number: '13800138000', note: '', enabled: 'on',
+      });
+      const final = await get('/admin');
+      check('三段优先于原样框', final.text.includes('沪A·12345') && !final.text.includes('乱写的'));
+
+      await post(`/cars/${code}/delete`);
+      check('测试车已删除', !(await get('/admin')).text.includes('沪A·12345'));
+    }
+  }
+
+  section('13. UI/UX 基础（可访问性 / 触控 / 图标）');
   {
     const css = (await get('/style.css')).text;
     check('键盘焦点可见（:focus-visible）', css.includes(':focus-visible'));
@@ -642,7 +704,7 @@ async function run() {
     check('后台不再用 emoji 当警告图标', !adminRow.text.includes('⚠'), '还有 ⚠️');
   }
 
-  section('13. 会话与越权');
+  section('14. 会话与越权');
   check('登出 = 302', (await post('/logout')).location === '/login');
   check('登出后后台跳登录页', (await get('/admin')).location === '/login');
   const anon = await post('/cars', { plate: '伪造' }, { auth: false });

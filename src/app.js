@@ -558,8 +558,13 @@ function createApp(options) {
   }
 
   function collectCarFields(form) {
+    // 车牌：优先用「省 + 城市字母 + 号码」三段拼，拼不出来才用原样文字
+    // （特殊车牌如 使/领/警/学/挂 没有省份代号，只能走原样那条路）
+    const composed = core.composePlate(form.plate_province, form.plate_city, form.plate_rest);
+    const rawPlate = core.normalizePlateRaw(form.plate);
+
     return {
-      plate: core.truncate(String(form.plate || '').trim(), 20),
+      plate: core.truncate(composed || rawPlate, 20),
       owner_name: core.truncate(String(form.owner_name || '').trim(), 20),
       phone: core.truncate(String(form.phone || '').trim(), 20),
       call_number: core.sanitizePhone(core.truncate(String(form.call_number || '').trim(), 20)),

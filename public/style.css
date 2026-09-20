@@ -359,13 +359,62 @@ textarea:focus {
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: var(--sp-3);
 }
 
 @media (max-width: 560px) {
   .grid-2 {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------------------------- 车牌输入 ---------------------------- */
+
+.plate-input {
+  display: grid;
+  grid-template-columns: 76px 84px minmax(0, 1fr);
+  gap: var(--sp-2);
+}
+
+.plate-input select,
+.plate-input input {
+  min-height: var(--tap-min);
+  width: 100%;
+}
+
+/* 实时预览拼出来的车牌，做成车牌的样子，一眼就能核对有没有错 */
+.plate-preview {
+  margin: var(--sp-2) 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+
+.plate-preview.on {
+  display: inline-block;
+  padding: 3px 12px;
+  border: 2px solid var(--primary);
+  border-radius: 8px;
+  color: var(--primary);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.plate-special {
+  margin-top: var(--sp-2);
+}
+
+.plate-special summary {
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.plate-special input {
+  margin-top: var(--sp-2);
+  width: 100%;
+  min-height: var(--tap-min);
 }
 
 /* ------------------------------ 按钮 ------------------------------ */

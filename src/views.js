@@ -1,6 +1,7 @@
 'use strict';
 
-const { esc, fmtTime } = require('./core');
+const core = require('./core');
+const { esc, fmtTime } = core;
 
 /* 图标一律内联 SVG：字体符号（☎）在不同系统里长得不一样，也没法跟随文字颜色和粗细 */
 const ICON_PHONE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
@@ -226,33 +227,78 @@ function loginPage({ mode = 'login', error = '', platformReady = true, hint = ''
   });
 }
 
+/**
+ * 车牌输入：省份和发牌机关字母是固定集合，做成选择；后面的号码单独一格。
+ * 三段凑齐就自动拼成「浙G·5RT71」；凑不齐（使/领/警 这类特殊车牌）
+ * 就退化到「特殊车牌」里的原样文字。
+ */
+function plateField(car) {
+  const v = car || {};
+  const parsed = core.parsePlate(v.plate);
+  const province = parsed.province || '';
+  const city = parsed.city || '';
+  const rest = parsed.rest || '';
+  const special = parsed.special || '';
+
+  const provinceOptions = ['<option value="">省份</option>']
+    .concat(
+      core.PLATE_PROVINCES.map(
+        (p) => `<option value="${esc(p)}"${p === province ? ' selected' : ''}>${esc(p)}</option>`
+      )
+    )
+    .join('');
+
+  const cityOptions = ['<option value="">字母</option>']
+    .concat(
+      core.PLATE_LETTERS.map(
+        (l) => `<option value="${esc(l)}"${l === city ? ' selected' : ''}>${esc(l)}</option>`
+      )
+    )
+    .join('');
+
+  const preview = province && city && rest ? `${province}${city}·${rest}` : '';
+
+  return `<div class="field">
+  <span class="label">车牌号</span>
+  <div class="plate-input">
+    <select name="plate_province" aria-label="车牌省份简称" data-plate-province>${provinceOptions}</select>
+    <select name="plate_city" aria-label="车牌城市字母" data-plate-city>${cityOptions}</select>
+    <input type="text" name="plate_rest" maxlength="6" value="${esc(rest)}"
+           placeholder="号码，如 5RT71" aria-label="车牌号码"
+           autocomplete="off" autocapitalize="characters" spellcheck="false" data-plate-rest>
+  </div>
+  <p class="plate-preview${preview ? ' on' : ''}" data-plate-preview>${esc(preview || '选省份和字母，再填后面的号码')}</p>
+  <details class="plate-special"${special ? ' open' : ''}>
+    <summary>特殊车牌 / 直接粘贴完整车牌</summary>
+    <input type="text" name="plate" maxlength="20" value="${esc(special)}"
+           placeholder="使123456、浙G·5RT71…" aria-label="完整车牌" data-plate-raw>
+    <p class="hint">上面三段填全就用上面三段；上面没填全、这里填了，就按这里的原样文字用。</p>
+  </details>
+</div>`;
+}
+
 function carForm(car, action, submitText) {
   const v = car || {};
   return `<form method="post" action="${esc(action)}" class="stack">
+  ${plateField(car)}
   <div class="grid-2">
     <label class="field">
-      <span class="label">车牌号</span>
-      <input type="text" name="plate" maxlength="20" value="${esc(v.plate)}" placeholder="京A·12345">
-    </label>
-    <label class="field">
-      <span class="label">车主称呼</span>
+      <span class="label">车主称呼 <span class="hint-inline">选填</span></span>
       <input type="text" name="owner_name" maxlength="20" value="${esc(v.owner_name)}" placeholder="张先生">
-    </label>
-  </div>
-  <div class="grid-2">
-    <label class="field">
-      <span class="label">拨号号码 <span class="hint-inline">扫码人拨打的就是它</span></span>
-      <input type="text" name="call_number" maxlength="20" value="${esc(v.call_number)}" placeholder="17012345678">
     </label>
     <label class="field">
       <span class="label">真实手机号 <span class="hint-inline">选填，仅你自己可见</span></span>
-      <input type="text" name="phone" maxlength="20" value="${esc(v.phone)}" placeholder="13800138000">
+      <input type="text" name="phone" maxlength="20" inputmode="tel" value="${esc(v.phone)}" placeholder="13800138000">
     </label>
   </div>
+  <label class="field">
+    <span class="label">拨号号码 <span class="hint-inline">扫码人拨打的就是它</span></span>
+    <input type="text" name="call_number" maxlength="20" inputmode="tel" value="${esc(v.call_number)}" placeholder="17012345678">
+  </label>
   <p class="hint">
-    有隐私号 / 虚拟号就填在<b>拨号号码</b>里，扫码人拨打它、看不到你的真实号；
-    没有的话把手机号填在<b>真实手机号</b>里也行（拨号号码留空时会拨打它）。
-    两个都留空，扫码页就不会有拨号按钮。
+    填的是隐私号 / 虚拟号，扫码人就打它、看不到你的真实号；
+    没有的话把手机号填在这里也行（真实手机号留空即可）。
+    两个号都不填，扫码页就不会有拨号按钮。
   </p>
   <label class="field">
     <span class="label">给扫码人的提示</span>

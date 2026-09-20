@@ -243,6 +243,68 @@ async function unsignValue(token, secret) {
   return timingSafeEqualStr(mac, expected) ? payload : null;
 }
 
+/* ------------------------------ 车牌 ------------------------------- */
+
+/** 31 个省级简称（普通民用号牌） */
+const PLATE_PROVINCES = [
+  '京', '津', '冀', '晋', '蒙', '辽', '吉', '黑', '沪', '苏', '浙', '皖', '闽', '赣', '鲁', '豫',
+  '鄂', '湘', '粤', '桂', '琼', '渝', '川', '贵', '云', '藏', '陕', '甘', '青', '宁', '新',
+];
+
+/** 发牌机关代号：A-Z，但车牌不用 I 和 O（跟 1、0 太像） */
+const PLATE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'.split('');
+
+/** 去掉分隔符与空格，统一大写：浙g·5rt 71 → 浙G5RT71 */
+function normalizePlate(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/[\s·.．・\-—_]/g, '')
+    .toUpperCase();
+}
+
+/**
+ * 把车牌拆成「省 + 城市字母 + 号码」。
+ * 拆得开就返回三段；拆不开（使/领/警/学/挂 这类特殊车牌）返回 { special: 原样 }。
+ */
+function parsePlate(value) {
+  const raw = normalizePlate(value);
+  if (!raw) return { province: '', city: '', rest: '', special: '' };
+
+  const province = PLATE_PROVINCES.includes(raw[0]) ? raw[0] : '';
+  const city = province && PLATE_LETTERS.includes(raw[1]) ? raw[1] : '';
+  const rest = city ? raw.slice(2) : '';
+
+  if (!province || !city || !rest) {
+    return { province: '', city: '', rest: '', special: raw };
+  }
+  return { province, city, rest, special: '' };
+}
+
+/** 三段拼成标准写法：浙G·5RT71。缺任何一段就返回空串，交给调用方决定回落 */
+function composePlate(province, city, rest) {
+  const p = String(province || '').trim();
+  const c = String(city || '').trim().toUpperCase();
+  const r = normalizePlate(rest);
+  if (!PLATE_PROVINCES.includes(p) || !PLATE_LETTERS.includes(c) || !r) return '';
+  return `${p}${c}·${r}`;
+}
+
+/**
+ * 处理「直接粘贴完整车牌」那一栏：
+ * 能拆成标准车牌就顺手排版（zhG5rt71 → 浙G·5RT71），
+ * 拆不开（使123456 这类特殊车牌）就只做最保守的清理，保留原样。
+ */
+function normalizePlateRaw(value) {
+  const upper = String(value === null || value === undefined ? '' : value)
+    .replace(/\s+/g, '')
+    .toUpperCase();
+  const parsed = parsePlate(upper);
+  if (parsed.province && parsed.city && parsed.rest) {
+    return `${parsed.province}${parsed.city}·${parsed.rest}`;
+  }
+  // 拆不开时只做最保守的清理：保留中文（使/领/警/学/挂 这类前缀）、字母、数字、间隔点
+  return upper.replace(/[^\u4e00-\u9fa5·0-9A-Z]/g, '');
+}
+
 /* --------------------------- 会话密钥获取 --------------------------- */
 
 /**
@@ -283,4 +345,10 @@ module.exports = {
   unsignValue,
   resolveSessionSecret,
   CODE_ALPHABET,
+  PLATE_PROVINCES,
+  PLATE_LETTERS,
+  normalizePlate,
+  parsePlate,
+  composePlate,
+  normalizePlateRaw,
 };
