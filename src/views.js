@@ -191,6 +191,10 @@ function carCard(car, { baseUrl, qrSvg }) {
         编号 <code>${esc(car.id)}</code>
         <span class="dot">·</span>创建于 ${esc(fmtTime(car.created_at))}
       </div>
+      <div class="car-perm">
+        <b>编号和二维码是永久的</b>：换车牌、换号码、换到另一辆车上，
+        都只改下面这条记录，贴纸不用重印。
+      </div>
     </div>
     <span class="badge ${car.enabled ? 'badge-on' : 'badge-off'}">${car.enabled ? '启用中' : '已停用'}</span>
   </div>
@@ -217,7 +221,7 @@ function carCard(car, { baseUrl, qrSvg }) {
   </div>
 
   <details class="car-edit">
-    <summary>编辑资料</summary>
+    <summary>编辑资料（换车牌 / 换号码 / 换车都改这里）</summary>
     ${carForm(car, `/admin/cars/${car.id}`, '保存修改')}
     <form method="post" action="/admin/cars/${esc(car.id)}/delete" class="danger-zone"
           data-confirm="确定删除车辆 ${esc(car.plate || car.id)}？该车的拨号记录也会一起删除。">
@@ -333,23 +337,30 @@ function adminPage({ cars, messages, baseUrl, universal, unread, notice }) {
 /* 打印贴纸                                                            */
 /* ------------------------------------------------------------------ */
 
-function sticker(car, { baseUrl, qrSvg, universal = false }) {
-  const plate = car.plate || '临时停车';
+/**
+ * 贴纸。
+ *
+ * 刻意**不印车牌**：车牌和号码都是扫码那一刻从数据库现查的，
+ * 印在贴纸上只会变成过期信息 —— 贴纸挪到别的车上、或者车换了牌照，
+ * 印上去的旧车牌就和扫码页对不上了。
+ * 印一个小号「编号」是给自己看的：它等于后台那条记录的编号，永久不变，
+ * 换车换号码都还是它，便于把贴纸和后台记录对上号。
+ */
+function sticker(car, { qrSvg, universal = false }) {
   return `<div class="sticker">
   <div class="sticker-head">
     <div class="sticker-title">扫码挪车</div>
     <div class="sticker-sub">临时停靠 · 请多包涵</div>
   </div>
   <div class="sticker-qr">${qrSvg}</div>
-  ${universal ? '' : `<div class="sticker-plate">${esc(plate)}</div>`}
   <div class="sticker-tip">车辆挡路请扫码联系车主</div>
+  <div class="sticker-code">${universal ? '通用贴纸 · 可贴任意车辆' : `编号 ${esc(car.id)}`}</div>
 </div>`;
 }
 
 function printPage(car, { baseUrl, qrSvg, universal = false }) {
-  const plate = car.plate || '临时停车';
   return layout({
-    title: `挪车贴纸 · ${plate}`,
+    title: universal ? '挪车贴纸 · 通用' : `挪车贴纸 · ${car.plate || '未填写车牌'}`,
     bodyClass: 'print-body',
     body: `<div class="print-toolbar">
   <a class="btn btn-sm btn-ghost" href="/admin">返回后台</a>
@@ -357,13 +368,15 @@ function printPage(car, { baseUrl, qrSvg, universal = false }) {
   <span class="hint">建议用 A6 或更小尺寸、不干胶纸打印，贴在挡风玻璃内侧右上角。</span>
 </div>
 
-${sticker(car, { baseUrl, qrSvg, universal })}
+${sticker(car, { qrSvg, universal })}
 
 <p class="print-note">
   ${
     universal
       ? '这是通用贴纸：一张可以贴在任意一辆车上。扫码后如果车主启用了多辆车，扫码人需要先点一下车牌。'
-      : `二维码内容：${esc(baseUrl)}/c/${esc(car.id)}`
+      : `贴纸上的码永久不变，所以车牌、号码随时能改，换到别的车上也不用重印。<br>
+         它指向后台里编号为 ${esc(car.id)} 的那条记录 —— 改那条记录就等于改这张贴纸。<br>
+         二维码内容：${esc(baseUrl)}/c/${esc(car.id)}`
   }
 </p>`,
   });
@@ -375,8 +388,8 @@ function printAllPage({ cars, baseUrl }) {
     ? cars
         .map(
           (car) => `<div class="sticker-cell">
-        ${sticker(car, { baseUrl, qrSvg: car.qrSvg })}
-        <div class="sticker-url">${esc(car.scanUrl)}</div>
+        ${sticker(car, { qrSvg: car.qrSvg })}
+        <div class="sticker-url">${esc(car.plate || '未填写车牌')} · ${esc(car.id)}</div>
       </div>`
         )
         .join('\n')
@@ -388,7 +401,7 @@ function printAllPage({ cars, baseUrl }) {
     body: `<div class="print-toolbar">
   <a class="btn btn-sm btn-ghost" href="/admin">返回后台</a>
   <button class="btn btn-sm btn-primary" type="button" data-print>打印 / 另存为 PDF</button>
-  <span class="hint">每辆车一张，共 ${cars.length} 张。裁剪后贴到对应车辆上，车牌已印在贴纸上。</span>
+  <span class="hint">每辆车一张，共 ${cars.length} 张。虚线下面那行是「车牌 · 编号」，裁剪后丢掉即可，别印到贴纸上。</span>
 </div>
 
 <div class="sticker-sheet">${sheet}</div>`,

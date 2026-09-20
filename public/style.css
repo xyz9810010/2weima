@@ -673,14 +673,6 @@ textarea:focus {
   display: block;
 }
 
-.sticker-plate {
-  font-size: 20pt;
-  font-weight: 700;
-  letter-spacing: 2px;
-  border-top: 1px dashed #999;
-  padding-top: 2mm;
-}
-
 .sticker-tip {
   font-size: 10pt;
   line-height: 1.6;
@@ -691,6 +683,16 @@ textarea:focus {
   font-size: 9pt;
   color: #444;
   margin-top: 2mm;
+}
+
+/* 车辆卡片里那句「编号和二维码是永久的」 */
+
+.car-perm {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #6b7280;
+  max-width: 34em;
 }
 
 .sticker-url {

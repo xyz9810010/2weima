@@ -248,6 +248,13 @@ async function run() {
   const dl = await get(`/admin/cars/${code}/qr.svg?download=1`);
   check('下载模式带 attachment', (dl.headers.get('content-disposition') || '').includes('attachment'));
   check('打印页 = 200', (await get(`/admin/cars/${code}/print`)).status === 200);
+  {
+    // 贴纸必须能随便挪到别的车上，所以本体上不能出现会过期的车牌
+    const one = (await get(`/admin/cars/${code}/print`)).text;
+    const body = (one.split('<div class="sticker">')[1] || '').split('<p class="print-note">')[0];
+    check('单张贴纸本体不印车牌（换车也不用重印）', !body.includes('沪A·88888'), body.slice(0, 200));
+    check('单张贴纸印的是永久编号', body.includes(`编号 ${code}`));
+  }
   check('静态 /style.css = 200', (await get('/style.css')).status === 200);
   check('静态 /app.js = 200', (await get('/app.js')).status === 200);
   check('不存在的编号 = 404', (await get('/c/NoSuchCode9')).status === 404);
@@ -333,7 +340,23 @@ async function run() {
     const printAll = await get('/admin/print-all');
     check('批量打印页 = 200', printAll.status === 200);
     check('批量打印页正好两张贴纸', (printAll.text.match(/class="sticker"/g) || []).length === 2);
-    check('批量打印页每张都印了车牌', printAll.text.includes('浙A·77777') && printAll.text.includes('苏D·12345'));
+    {
+      // 只取贴纸本体：切到下面那行「车牌 · 编号」小字之前
+      const chunks = printAll.text
+        .split('<div class="sticker">')
+        .slice(1)
+        .map((c) => c.split('<div class="sticker-url">')[0]);
+      check(
+        '【关键】贴纸本体不印车牌，可随时挪到别的车上',
+        chunks.length === 2 && chunks.every((c) => !c.includes('浙A·77777') && !c.includes('苏D·12345')),
+        chunks[0] ? chunks[0].slice(0, 200) : 'no sticker'
+      );
+      check('每张贴纸都印了自己的永久编号', chunks.every((c) => c.includes('编号 ')));
+    }
+    check(
+      '贴纸下方另有「车牌 · 编号」小字，裁剪前好对号',
+      printAll.text.includes('浙A·77777 · ') && printAll.text.includes('苏D·12345 · ')
+    );
 
     const uniPrint = await get('/admin/print-universal');
     check('通用贴纸打印页 = 200', uniPrint.status === 200 && uniPrint.text.includes('通用贴纸'));
