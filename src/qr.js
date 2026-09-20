@@ -584,6 +584,17 @@ function toSvg(text, options = {}) {
     ? `<circle cx="${center}" cy="${center}" r="${center}" fill="${light}"/>`
     : `<rect width="${dimension}" height="${dimension}" fill="${light}"/>`;
 
+  // 圆形轮廓。
+  //
+  // 为什么需要它：白盘画在白纸上等于看不见，人眼只看到深色图案本身，
+  // 而那仍然铺满一个方形区域 —— 结果就是「看着还是方的」。
+  // 环的半径贴着圆盘边缘，离静默区还有约 7 个模块的余量，不参与编码，不影响识别。
+  const ringWidth = scale * 0.7;
+  const ring = round
+    ? `<circle cx="${center}" cy="${center}" r="${center - ringWidth / 2}" ` +
+      `fill="none" stroke="${dark}" stroke-width="${ringWidth}"/>`
+    : '';
+
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${dimension}" height="${dimension}" ` +
     `viewBox="0 0 ${dimension} ${dimension}" role="img">` +
@@ -591,6 +602,7 @@ function toSvg(text, options = {}) {
     `<g fill="${dark}">${dots}${finderOuter}</g>` +
     `<g fill="${light}">${finderRing}</g>` +
     `<g fill="${dark}">${finderCore}</g>` +
+    ring +
     `</svg>`
   );
 }

@@ -663,7 +663,8 @@ textarea:focus {
   flex: 0 0 auto;
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  /* 二维码本体是圆的，容器也做成圆的，免得方形边框和圆形码互相打架 */
+  border-radius: 50%;
   padding: 8px;
   line-height: 0;
 }
