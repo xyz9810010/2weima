@@ -261,7 +261,76 @@ async function run() {
   check('未命中路由 = 404', (await get('/definitely-not-here')).status === 404);
   check('留言接口已下线 = 404', (await post(`/c/${code}/message`, { content: 'x' })).status === 404);
 
-  section('6. 后台：改 / 停用 / 已读 / 删');
+  section('6. 把码给别人：单辆车的管理链接');
+  {
+    // 先造一辆「别人的车」，这样「看不到其他车」这条断言才有意义
+    await post('/admin/cars', {
+      plate: '苏D·12345', owner_name: '别人的车', phone: '13655556666', call_number: '', note: '', enabled: 'on',
+    });
+
+    const adminRow = await get('/admin');
+    check('后台每辆车都有管理链接', adminRow.text.includes('这辆车的管理链接'));
+    // 车列表是新的在前，所以必须按「卡片」定位，不能按出现顺序猜
+    const cards = adminRow.text.split('<article class="car">').slice(1);
+    const myCard = cards.find((c) => c.includes('沪A·88888')) || '';
+    const otherCard = cards.find((c) => c.includes('苏D·12345')) || '';
+    check('两辆车各有一条管理链接', Boolean(myCard) && Boolean(otherCard));
+    const link = (myCard.match(/\/edit\/([A-Za-z0-9_-]{1,40}\.[A-Za-z0-9_-]{1,64})/) || [])[1] || '';
+    check('能解析出本辆车的管理令牌 ' + link.slice(0, 14) + '…', Boolean(link), link);
+    check('两辆车的管理链接不同', !otherCard.includes(link) && link.length > 0);
+
+    if (link) {
+      // 关键：一个「没登录」的独立客户端 —— 模拟拿到链接的另一个人
+      const stranger = await request('GET', `/edit/${link}`, null, { auth: false });
+      check('【关键】未登录也能打开（不需要后台密码）', stranger.status === 200, stranger.status);
+      check('页面显示的是这辆车', stranger.text.includes('沪A·88888'));
+      check('【隔离】页面不泄露其他车辆', !stranger.text.includes('苏D·12345'), '看到了别人的车');
+      check('【隔离】没有车辆列表、没有拨号记录', !stranger.text.includes('拨号记录') && !stranger.text.includes('新增车辆'));
+
+      const saved = await request(
+        'POST',
+        `/edit/${link}`,
+        {
+          plate: '沪A·88888',
+          owner_name: '张三',
+          phone: REAL_PHONE,
+          call_number: '400-000-9999',
+          note: '对方改的',
+          enabled: 'on',
+        },
+        { auth: false }
+      );
+      check('未登录也能保存', saved.status === 302 && saved.location.includes('notice=saved'), saved.status);
+
+      const scanAfter = await get(`/c/${code}`);
+      check('改完扫码页立刻生效（换了号码）', scanAfter.text.includes('4000009999'), '没生效');
+      check('同一张贴纸，编号和车牌都没变', scanAfter.text.includes('沪A·88888'));
+
+      const printByStranger = await request('GET', `/edit/${link}/print`, null, { auth: false });
+      check('对方也能自己打印贴纸', printByStranger.status === 200, printByStranger.status);
+
+      const forged = await request(
+        'GET',
+        `/edit/${code}.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`,
+        null,
+        { auth: false }
+      );
+      check('【安全】伪造令牌 = 404', forged.status === 404, forged.status);
+      const noSig = await request('GET', `/edit/${code}`, null, { auth: false });
+      check('【安全】只给编号不签名 = 404', noSig.status === 404, noSig.status);
+    }
+
+    // 清掉「别人的车」，并恢复原号码（后面几节还要用）
+    const listAgain = await get('/admin');
+    const otherCode = [...new Set((listAgain.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)))]
+      .find((c) => c !== code);
+    if (otherCode) await post(`/admin/cars/${otherCode}/delete`);
+    await post(`/admin/cars/${code}`, {
+      plate: '沪A·88888', owner_name: '张三', phone: REAL_PHONE, call_number: '400-123-4567', note: '改过了',
+    });
+  }
+
+  section('7. 后台：改 / 停用 / 已读 / 删');
   const updated = await post(`/admin/cars/${code}`, {
     plate: '沪A·88888',
     owner_name: '张三',
@@ -289,7 +358,7 @@ async function run() {
   check('删除车辆 = 302 notice=deleted', deleted.location.includes('notice=deleted'), deleted.location);
   check('删除后扫码 = 404', (await get(`/c/${code}`)).status === 404);
 
-  section('7. 通用码（一张贴纸贴所有车）');
+  section('8. 通用码（一张贴纸贴所有车）');
   {
     const base = BASE;
     const { toSvg } = require('../src/qr.js');
@@ -366,7 +435,7 @@ async function run() {
     check('全部删掉后根路径又给出提示', (await get('/')).status === 404);
   }
 
-  section('8. 会话与越权');
+  section('9. 会话与越权');
   check('登出 = 302', (await post('/admin/logout')).location === '/admin/login');
   check('登出后后台跳登录页', (await get('/admin')).location === '/admin/login');
   const anon = await post('/admin/cars', { plate: '伪造' }, { auth: false });

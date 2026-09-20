@@ -99,6 +99,37 @@ function pickCarPage(cars) {
   });
 }
 
+/**
+ * 单辆车的管理页：把链接发给开这辆车的人，对方只能改这一辆。
+ * 刻意做得很窄：没有车辆列表、没有拨号记录、没有其他车的信息。
+ */
+function carEditPage({ car, token, dialNumber, notice }) {
+  const plate = car.plate || '未填写车牌';
+  return layout({
+    title: `管理挪车码 · ${plate}`,
+    body: `<main class="wrap wrap-narrow">
+  <section class="card">
+    <h1 class="card-title">管理我的挪车码</h1>
+    <p class="muted">
+      这个页面只能修改 <b>${esc(plate)}</b> 这一辆车（编号 <code>${esc(car.id)}</code>）。
+    </p>
+    ${notice ? banner(notice, 'info') : ''}
+    ${dialNumber ? '' : banner('现在两个号码都是空的，扫码页不会有拨号按钮。请至少填一个。')}
+    ${carForm(car, `/edit/${esc(token)}`, '保存')}
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">这辆车的扫码页</h2>
+    <p class="hint">改完立刻生效。<b>贴纸不用重印</b> —— 二维码里只有网址，车牌和号码是扫码时现查的。</p>
+    <div class="btn-row">
+      <a class="btn btn-sm btn-ghost" href="/c/${esc(car.id)}" target="_blank" rel="noreferrer">预览扫码页</a>
+      <a class="btn btn-sm btn-ghost" href="/edit/${esc(token)}/print" target="_blank" rel="noreferrer">打印贴纸</a>
+    </div>
+  </section>
+</main>`,
+  });
+}
+
 function messagePage({ title, text, bodyHtml = '' }) {
   return layout({
     title,
@@ -218,6 +249,19 @@ function carCard(car, { baseUrl, qrSvg }) {
         }
       </p>
     </div>
+  </div>
+
+  <div class="car-share">
+    <div class="car-share-head">
+      <b>这辆车的管理链接</b>
+      <button class="btn btn-xs btn-ghost" type="button" data-copy="${esc(car.editUrl)}">复制</button>
+    </div>
+    <code class="edit-link">${esc(car.editUrl)}</code>
+    <p class="hint">
+      把这条链接发给开这辆车的人，对方就能自己改车牌和号码 ——
+      只能改这一辆，看不到你其他车，也拿不到后台密码。
+      <b>转发这条链接 = 交出这一辆车的修改权</b>，请只发给你信任的人。
+    </p>
   </div>
 
   <details class="car-edit">
@@ -411,6 +455,7 @@ function printAllPage({ cars, baseUrl }) {
 module.exports = {
   scanPage,
   pickCarPage,
+  carEditPage,
   messagePage,
   loginPage,
   adminPage,

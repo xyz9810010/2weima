@@ -46,4 +46,31 @@
     event.preventDefault();
     window.print();
   });
+
+  // 4) 复制管理链接（长链接手抄容易错）
+  document.addEventListener('click', function (event) {
+    var target = event.target;
+    while (target && target !== document && !target.hasAttribute('data-copy')) {
+      target = target.parentNode;
+    }
+    if (!target || target === document) return;
+    event.preventDefault();
+
+    var text = target.getAttribute('data-copy');
+    var done = function () {
+      var old = target.textContent;
+      target.textContent = '已复制';
+      setTimeout(function () {
+        target.textContent = old;
+      }, 1500);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {
+        window.prompt('复制这条链接：', text);
+      });
+    } else {
+      window.prompt('复制这条链接：', text);
+    }
+  });
 })();

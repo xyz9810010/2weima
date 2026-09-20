@@ -195,6 +195,7 @@ module.exports = {
   randomCode,
   randomHex,
   timingSafeEqualStr,
+  hmacBase64Url,
   signValue,
   unsignValue,
   resolveSessionSecret,

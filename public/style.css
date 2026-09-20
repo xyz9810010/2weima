@@ -695,6 +695,35 @@ textarea:focus {
   max-width: 34em;
 }
 
+/* 每辆车的管理链接（可转发给开车的人） */
+
+.car-share {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px dashed #d6ddea;
+  border-radius: 10px;
+  background: #fafbfe;
+}
+
+.car-share-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.edit-link {
+  display: block;
+  margin: 8px 0 6px;
+  padding: 7px 9px;
+  background: #fff;
+  border: 1px solid #e6eaf2;
+  border-radius: 6px;
+  font-size: 12px;
+  word-break: break-all;
+}
+
 .sticker-url {
   font-size: 7pt;
   color: #777;

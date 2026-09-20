@@ -155,6 +155,33 @@ function createApp(options) {
 
   const CLEAR_COOKIE_HEADER = `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 
+  /* ------------------------- 单辆车的管理链接 ------------------------- */
+
+  /**
+   * 每辆车一条「管理链接」：`/edit/<编号>.<签名>`
+   *
+   * 用途：把某个码给别人时，对方要能自己改那一辆车的车牌和号码，
+   * 但绝不应该拿到后台总密码（那等于交出所有车）。
+   *
+   * 实现：签名 = HMAC(SESSION_SECRET, "edit:" + 编号)，
+   * 所以不需要额外的表字段、也不需要迁移；令牌不可伪造、不可枚举。
+   * 换 SESSION_SECRET 会让所有管理链接立刻失效（相当于一键收回全部授权）。
+   */
+  async function editTokenFor(carId) {
+    return `${carId}.${await core.hmacBase64Url(`edit:${carId}`, sessionSecret)}`;
+  }
+
+  /** 从令牌还原车辆；签名不对就当作不存在 */
+  async function carByEditToken(token) {
+    const raw = String(token || '');
+    const index = raw.lastIndexOf('.');
+    if (index <= 0) return null;
+    const carId = raw.slice(0, index);
+    const expected = await editTokenFor(carId);
+    if (!core.timingSafeEqualStr(raw, expected)) return null;
+    return store.getCar(carId);
+  }
+
   /* --------------------------- 扫码方 ----------------------------- */
 
   /**
@@ -254,6 +281,49 @@ function createApp(options) {
     return jsonResponse(200, { ok: true });
   }
 
+  /* --------------------- 单辆车的管理页（给别人用） -------------------- */
+
+  /**
+   * 持有链接的人可以改这一辆车的资料，但看不到其他任何车辆，
+   * 也不需要（拿不到）后台总密码。
+   */
+  async function handleCarEditPage(req, url, params) {
+    const car = await carByEditToken(params[0]);
+    if (!car) {
+      return pageResponse(404, '链接无效', '这个管理链接不对或已失效。请向给你链接的人索取新的链接。');
+    }
+    const noticeKey = url.searchParams.get('notice');
+    return htmlResponse(
+      200,
+      views.carEditPage({
+        car,
+        token: params[0],
+        dialNumber: dialNumberOf(car),
+        notice: noticeKey === 'saved' ? '已保存。扫码页立刻生效，贴纸不用重印。' : '',
+      })
+    );
+  }
+
+  async function handleCarEditSubmit(req, url, params) {
+    const car = await carByEditToken(params[0]);
+    if (!car) {
+      return pageResponse(404, '链接无效', '这个管理链接不对或已失效。请向给你链接的人索取新的链接。');
+    }
+    const fields = collectCarFields(core.parseForm(await req.readText()));
+    await store.updateCar(car.id, fields);
+    return redirectResponse(`/edit/${params[0]}?notice=saved`);
+  }
+
+  async function handleCarEditPrint(req, url, params) {
+    const car = await carByEditToken(params[0]);
+    if (!car) return pageResponse(404, '链接无效', '这个管理链接不对或已失效。');
+    const base = baseUrlOf(req);
+    return htmlResponse(
+      200,
+      views.printPage(car, { baseUrl: base, qrSvg: qrSvgForContent(carUrl(car, base)) })
+    );
+  }
+
   /* --------------------------- 车主后台 --------------------------- */
 
   async function handleLoginForm(req) {
@@ -303,12 +373,16 @@ function createApp(options) {
 
   async function renderAdmin(req, url) {
     const base = baseUrlOf(req);
-    const cars = (await store.listCars()).map((car) => {
-      const item = Object.assign({}, car);
-      item.qrSvg = qrSvgForContent(carUrl(car, base));
-      item.scanUrl = carUrl(car, base);
-      return item;
-    });
+    const cars = [];
+    for (const car of await store.listCars()) {
+      cars.push(
+        Object.assign({}, car, {
+          qrSvg: qrSvgForContent(carUrl(car, base)),
+          scanUrl: carUrl(car, base),
+          editUrl: `${base}/edit/${await editTokenFor(car.id)}`,
+        })
+      );
+    }
     const enabledCars = cars.filter((car) => car.enabled);
     const noticeKey = url.searchParams.get('notice');
     return htmlResponse(
@@ -468,6 +542,8 @@ function createApp(options) {
   /* ----------------------------- 路由表 ---------------------------- */
 
   const ID = '([A-Za-z0-9_-]{1,40})';
+  /** 管理令牌 = 编号 + '.' + base64url 签名 */
+  const TOKEN = '([A-Za-z0-9_-]{1,40}\\.[A-Za-z0-9_-]{1,64})';
 
   const routes = [
     ['GET', /^\/healthz$/, async () => jsonResponse(200, { ok: true })],
@@ -475,6 +551,11 @@ function createApp(options) {
     ['GET', /^\/$/, handleUniversalScan],
     ['GET', new RegExp(`^/c/${ID}$`), handleScan],
     ['POST', new RegExp(`^/c/${ID}/call$`), handlePostCall],
+
+    // 单辆车的管理链接：给别人用，不需要登录，也看不到别的车
+    ['GET', new RegExp(`^/edit/${TOKEN}$`), handleCarEditPage],
+    ['POST', new RegExp(`^/edit/${TOKEN}$`), handleCarEditSubmit],
+    ['GET', new RegExp(`^/edit/${TOKEN}/print$`), handleCarEditPrint],
 
     ['GET', /^\/admin\/login$/, handleLoginForm],
     ['POST', /^\/admin\/login$/, handleLoginSubmit],
