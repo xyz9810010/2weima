@@ -45,7 +45,7 @@ const NOTICES = {
   readAll: { text: '已全部标记为已读。', kind: 'info' },
   cleaned: { text: '已清理掉空白车辆。', kind: 'info' },
   needinfo: {
-    text: '没建成：至少要填「车牌」或一个号码。一条什么都不填的记录，贴纸扫开什么也做不了。',
+    text: '还没建成：至少要填「车牌」或一个号码，否则这张贴纸扫开什么都没有。',
     kind: 'error',
   },
 };
@@ -672,12 +672,11 @@ function createApp(options) {
     const session = await currentSession(req);
     const found = await loadCarFor(session, params[0]);
     if (found.error) return found.error;
+
+    // 修改**不做**「必须有车牌或号码」的校验：改一条已有记录时，
+    // 用户很可能只动一个字段（比如只填个称呼），不能因为别的字段是空的就不让存。
+    // 那条校验只拦「新建」，目的是别让后台堆满空白记录。
     const fields = collectCarFields(core.parseForm(await req.readText()));
-    if (!carHasIdentity(fields)) {
-      return wantsFragments(req)
-        ? jsonResponse(400, { ok: false, notice: NOTICES.needinfo.text, kind: NOTICES.needinfo.kind })
-        : redirectResponse(`${homeFor(session)}?notice=needinfo`);
-    }
     await store.updateCar(found.car.id, fields);
     return afterChange(session, req, url, 'updated');
   }

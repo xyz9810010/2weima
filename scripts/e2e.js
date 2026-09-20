@@ -593,9 +593,24 @@ async function run() {
 
     if (code) {
       // 改成全空也要被拦
-      const cleared = await post(`/cars/${code}`, { plate: '', owner_name: '', phone: '', call_number: '', note: '', enabled: 'on' });
-      check('把车改成全空被拦下', cleared.location.includes('notice=needinfo'), cleared.location);
-      check('号码没被清掉', (await get('/admin')).text.includes('4001112222'), '号码被清空了');
+      // 「只改一个字段」：按浏览器的行为提交整份表单，只把称呼填上。
+      // 修改不该受「必须有车牌或号码」那条限制 —— 那条只拦新建。
+      const onlyName = await request('POST', `/cars/${code}`, {
+        plate_province: '', plate_city: '', plate_rest: '', plate: '',
+        owner_name: '只填了称呼', phone: '', call_number: '400-111-2222', note: '', enabled: 'on',
+      }, { headers: { 'X-Requested-With': 'fetch' } });
+      check('只改称呼也能保存（修改不做必填校验）', onlyName.status === 200, onlyName.status);
+      check('称呼存进去了', (await get('/admin')).text.includes('只填了称呼'), '没存上');
+
+      // 浏览器提交时其它字段是预填的，所以只改称呼不会动到车牌和号码
+      const keepOthers = await request('POST', `/cars/${code}`, {
+        plate_province: '粤', plate_city: 'B', plate_rest: '9X8K6',
+        plate: '', owner_name: '只填了称呼', phone: '', call_number: '400-111-2222', note: '', enabled: 'on',
+      }, { headers: { 'X-Requested-With': 'fetch' } });
+      check('改称呼不影响车牌和号码', keepOthers.status === 200, keepOthers.status);
+      const kept = await get('/admin');
+      check('车牌还是 粤B·9X8K6', kept.text.includes('粤B·9X8K6'), '车牌丢了');
+      check('号码还是 4001112222', kept.text.includes('4001112222'), '号码丢了');
 
       // 平台方的「清理空白车辆」按钮
       await post(`/cars/${code}/delete`);
@@ -750,11 +765,17 @@ async function run() {
       check('AJAX 保存返回新片段', updated && updated.html['car-list'].includes('13900139000'));
       check('保存也带回「已保存」提示', updated && updated.notice && updated.notice.text.includes('已保存'), updated && JSON.stringify(updated.notice));
 
-      const bad = await request('POST', `/cars/${code}`, {
+      const partial = await request('POST', `/cars/${code}`, {
+        plate_province: '', plate_city: '', plate_rest: '', plate: '',
+        owner_name: '只改称呼', phone: '', call_number: '13900139000', note: '', enabled: 'on',
+      }, ajax);
+      check('AJAX 改单个字段不再被拦（更新不做必填校验）', partial.status === 200, partial.status);
+
+      const bad = await request('POST', '/cars', {
         plate_province: '', plate_city: '', plate_rest: '', plate: '', owner_name: '', phone: '', call_number: '', note: '', enabled: 'on',
       }, ajax);
       const badPayload = json(bad);
-      check('AJAX 校验失败 = 400 且带说明', bad.status === 400 && badPayload && badPayload.ok === false && badPayload.notice.includes('没建成'), bad.status);
+      check('AJAX 新建空白记录 = 400 且带说明', bad.status === 400 && badPayload && badPayload.ok === false && badPayload.notice.includes('还没建成'), bad.status);
 
       const removed = json(await request('POST', `/cars/${code}/delete`, {}, ajax));
       check('AJAX 删除后片段里没有它', removed && !removed.html['car-list'].includes('闽D·6Y7U8'));
