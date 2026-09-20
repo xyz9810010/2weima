@@ -580,20 +580,20 @@ function toSvg(text, options = {}) {
     finderCore += `<circle cx="${cx}" cy="${cy}" r="${1.5 * scale}"/>`;
   }
 
-  const background = round
-    ? `<circle cx="${center}" cy="${center}" r="${center}" fill="${light}"/>`
-    : `<rect width="${dimension}" height="${dimension}" fill="${light}"/>`;
-
-  // 圆形轮廓。
+  // 不做圆角 / 圆形裁剪。
   //
-  // 为什么需要它：白盘画在白纸上等于看不见，人眼只看到深色图案本身，
-  // 而那仍然铺满一个方形区域 —— 结果就是「看着还是方的」。
-  // 环的半径贴着圆盘边缘，离静默区还有约 7 个模块的余量，不参与编码，不影响识别。
-  const ringWidth = scale * 0.7;
-  const ring = round
-    ? `<circle cx="${center}" cy="${center}" r="${center - ringWidth / 2}" ` +
-      `fill="none" stroke="${dark}" stroke-width="${ringWidth}"/>`
-    : '';
+  // 「让二维码本体变成圆的」在标准二维码格式下**做不到**：深色模块铺满正方形网格，
+  // 三个定位图形正好在三个角上，裁成圆必然切掉定位图形 —— 扫码失效。
+  //
+  // 实测数据（jsQR × 3 种内容 × 6 个渲染尺寸），留着免得以后有人再试一遍：
+  //   圆角 ≤10 模块 → 只切静默区，深色轮廓**看不出变化**，100% 可解码（等于白做）
+  //   圆角 12~14   → 已经切进定位图形的角，但数据点仍铺满方形，**依然看不出变圆**，100%
+  //   圆角 17（≈圆）→ 定位图形被切掉，只剩 28% 可解码
+  // 结论：裁剪换不来观感，只削弱扫码可靠性，所以不做。
+  // 想要「看起来是圆的」只有两条路：用圆形贴纸（整张贴纸是圆的），
+  // 或改用微信小程序码那种私有圆形格式（普通扫码器认不了）。
+
+  const background = `<rect width="${dimension}" height="${dimension}" fill="${light}"/>`;
 
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${dimension}" height="${dimension}" ` +
@@ -602,7 +602,6 @@ function toSvg(text, options = {}) {
     `<g fill="${dark}">${dots}${finderOuter}</g>` +
     `<g fill="${light}">${finderRing}</g>` +
     `<g fill="${dark}">${finderCore}</g>` +
-    ring +
     `</svg>`
   );
 }
