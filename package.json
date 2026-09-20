@@ -1,0 +1,21 @@
+{
+  "name": "chezai-qrcode",
+  "version": "0.2.0",
+  "private": true,
+  "description": "车载挪车二维码：挡风玻璃贴纸扫码，匿名留言 / 隐私号拨号联系车主。同一套代码可跑在 Node 或 Cloudflare Workers",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node scripts/start.js",
+    "dev": "node --watch scripts/start.js",
+    "test": "node scripts/selftest.js",
+    "e2e": "node scripts/e2e.js",
+    "verify": "npm test && npm run e2e",
+    "worker:dev": "npx --yes wrangler dev",
+    "worker:deploy": "npx --yes wrangler deploy",
+    "db:local": "npx --yes wrangler d1 execute chezai-qrcode --local --file=./schema.sql",
+    "db:remote": "npx --yes wrangler d1 execute chezai-qrcode --remote --file=./schema.sql"
+  },
+  "license": "MIT"
+}

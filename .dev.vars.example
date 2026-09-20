@@ -1,0 +1,9 @@
+# 复制成 .dev.vars，供 `npx wrangler dev` 本地开发使用。
+# 这个文件已被 .gitignore 忽略，不要提交。
+#
+# 部署到线上时不要在 wrangler.toml 里写这两个值，用：
+#   npx wrangler secret put ADMIN_PASSWORD
+#   npx wrangler secret put SESSION_SECRET
+
+ADMIN_PASSWORD=dev-password-change-me
+SESSION_SECRET=dev-only-session-secret-change-me
