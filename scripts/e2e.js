@@ -140,7 +140,7 @@ async function run() {
   check('http 下 Cookie 不带 Secure（带了下游就登不进去）', !login.setCookie.includes('Secure'));
   check('后台首页 = 200', (await get('/admin')).status === 200);
 
-  section('2. 建车 → 扫码 → 留言 → 拨号');
+  section('2. 建车 → 扫码 → 一键拨号');
   const created = await post('/admin/cars', {
     plate: '沪A·88888',
     owner_name: '张三',
@@ -162,26 +162,60 @@ async function run() {
   const scan = await get(`/c/${code}`);
   check('扫码页 = 200', scan.status === 200);
   check('扫码页显示车牌', scan.text.includes('沪A·88888'));
-  check('扫码页显示对外隐私号', scan.text.includes(CALL_NUMBER));
-  check('【安全】扫码页不含车主真实手机号', !scan.text.includes(REAL_PHONE), '真实号码泄露了！');
-
-  const sent = await post(`/c/${code}/message`, {
-    reason: '挡住了我的车，需要挪一下',
-    content: '你好，你的车挡住出入口了，麻烦挪一下',
-    contact: '13900000000',
-  });
-  check('留言 = 302 → sent 页', sent.location === `/c/${code}/sent`, sent.location);
-  check('sent 页 = 200', (await get(`/c/${code}/sent`)).status === 200);
+  check('扫码页有 tel: 拨号按钮', scan.text.includes(`href="tel:${CALL_NUMBER}"`), '没有拨号按钮');
+  check('拨号按钮指向「拨号号码」', !scan.text.includes(`tel:${REAL_PHONE}`));
+  check('【安全】有独立拨号号码时，扫码页不含真实手机号', !scan.text.includes(REAL_PHONE), '真实号码泄露了！');
+  check('扫码页已无留言表单', !scan.text.includes('name="content"') && !scan.text.includes('name="contact"'));
 
   const call = await post(`/c/${code}/call`);
   check('拨号打点 = 200 {ok:true}', call.status === 200 && call.text.includes('"ok":true'));
 
   const admin2 = await get('/admin');
-  check('后台看到留言内容', admin2.text.includes('挡住出入口'));
-  check('后台看到拨号记录', admin2.text.includes('扫码人发起了拨号'));
-  check('后台能看到车主真实手机号（仅车主侧）', admin2.text.includes(REAL_PHONE));
+  check('后台看到拨号记录', admin2.text.includes('有人点了一次「一键拨号」'));
+  check('后台能看到车主填的号码（仅车主侧）', admin2.text.includes(REAL_PHONE));
 
-  section('3. 二维码 / 打印 / 静态资源 / 404');
+  section('3. 只填真实手机号时，也必须能拨号（回归）');
+  const onlyPhone = await post('/admin/cars', {
+    plate: '京B·00001',
+    owner_name: '李四',
+    phone: '13711112222',
+    call_number: '',
+    note: '',
+    enabled: 'on',
+  });
+  check('建车 = 302', onlyPhone.location.includes('notice=created'), onlyPhone.location);
+  const admin3 = await get('/admin');
+  const code2 = (admin3.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || [])
+    .map((s) => s.slice(3))
+    .find((c) => c !== code);
+  check('拿到第二辆车编号 ' + code2, Boolean(code2));
+  if (code2) {
+    const scan2 = await get(`/c/${code2}`);
+    check('未填「拨号号码」时，扫码页仍然有拨号按钮', scan2.text.includes('href="tel:13711112222"'), '没有回退到真实手机号');
+    const call2 = await post(`/c/${code2}/call`);
+    check('回退号码也能打点', call2.status === 200 && call2.text.includes('"ok":true'), call2.status);
+  }
+
+  section('4. 两个号码都没填时，不应该有拨号按钮');
+  const noNumber = await post('/admin/cars', {
+    plate: '粤C·00002', owner_name: '', phone: '', call_number: '', note: '', enabled: 'on',
+  });
+  check('建车 = 302', noNumber.location.includes('notice=created'), noNumber.location);
+  const admin4 = await get('/admin');
+  const code3 = (admin4.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || [])
+    .map((s) => s.slice(3))
+    .find((c) => c !== code && c !== code2);
+  check('拿到第三辆车编号 ' + code3, Boolean(code3));
+  if (code3) {
+    const scan3 = await get(`/c/${code3}`);
+    check('没有号码时扫码页不给拨号按钮', !scan3.text.includes('href="tel:'), '竟然有按钮');
+    check('没有号码时给出明确提示', scan3.text.includes('还没有留下联系电话'));
+    for (const c of [code2, code3]) await post(`/admin/cars/${c}/delete`);
+    const afterCleanup = await get('/admin');
+    check('清掉回归用例的两辆车', !afterCleanup.text.includes('京B·00001') && !afterCleanup.text.includes('粤C·00002'));
+  }
+
+  section('5. 二维码 / 打印 / 静态资源 / 404');
   const svg = await get(`/admin/cars/${code}/qr.svg`);
   check('QR = 200 image/svg+xml', svg.status === 200 && svg.headers.get('content-type').includes('svg'));
   const dl = await get(`/admin/cars/${code}/qr.svg?download=1`);
@@ -191,21 +225,9 @@ async function run() {
   check('静态 /app.js = 200', (await get('/app.js')).status === 200);
   check('不存在的编号 = 404', (await get('/c/NoSuchCode9')).status === 404);
   check('未命中路由 = 404', (await get('/definitely-not-here')).status === 404);
+  check('留言接口已下线 = 404', (await post(`/c/${code}/message`, { content: 'x' })).status === 404);
 
-  section('4. 输入校验与限流');
-  const empty = await post(`/c/${code}/message`, { reason: '', content: '' });
-  check('空内容 = 302 err=2', empty.location.includes('err=2'), empty.location);
-  const long = await post(`/c/${code}/message`, { reason: '', content: 'x'.repeat(301) });
-  check('超长内容 = 302 err=3', long.location.includes('err=3'), long.location);
-
-  let limited = false;
-  for (let i = 0; i < 10 && !limited; i++) {
-    const res = await post(`/c/${code}/message`, { reason: '测试', content: `第 ${i} 条` });
-    limited = res.location.includes('err=1');
-  }
-  check('同 IP 反复提交触发限流', limited, '循环 10 次仍未限流');
-
-  section('5. 后台：改 / 停用 / 已读 / 删');
+  section('6. 后台：改 / 停用 / 已读 / 删');
   const updated = await post(`/admin/cars/${code}`, {
     plate: '沪A·88888',
     owner_name: '张三',
@@ -233,7 +255,7 @@ async function run() {
   check('删除车辆 = 302 notice=deleted', deleted.location.includes('notice=deleted'), deleted.location);
   check('删除后扫码 = 404', (await get(`/c/${code}`)).status === 404);
 
-  section('6. 会话与越权');
+  section('7. 会话与越权');
   check('登出 = 302', (await post('/admin/logout')).location === '/admin/login');
   check('登出后后台跳登录页', (await get('/admin')).location === '/admin/login');
   const anon = await post('/admin/cars', { plate: '伪造' }, { auth: false });

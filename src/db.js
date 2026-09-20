@@ -69,9 +69,6 @@ function createStore(dataDir) {
     countUnread: db.prepare('SELECT COUNT(*) AS n FROM messages WHERE read_at IS NULL'),
     markRead: db.prepare('UPDATE messages SET read_at = ? WHERE id = ? AND read_at IS NULL'),
     markAllRead: db.prepare('UPDATE messages SET read_at = ? WHERE read_at IS NULL'),
-    countRecentByIp: db.prepare(
-      'SELECT COUNT(*) AS n FROM messages WHERE car_id = ? AND ip = ? AND created_at >= ?'
-    ),
   };
 
   /* ---------------------- 登录限流（进程内滑动窗口） ------------------- */
@@ -184,11 +181,6 @@ function createStore(dataDir) {
 
     async markAllRead() {
       return stmt.markAllRead.run(Date.now()).changes;
-    },
-
-    async countRecentByIp(carId, ip, sinceMs) {
-      const row = stmt.countRecentByIp.get(String(carId), String(ip), Number(sinceMs));
-      return row ? Number(row.n) : 0;
     },
 
     async bumpRateLimit(bucket, windowMs, limit) {

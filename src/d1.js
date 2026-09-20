@@ -150,16 +150,6 @@ function createStore(db) {
       return result.meta ? Number(result.meta.changes) : 0;
     },
 
-    async countRecentByIp(carId, ip, sinceMs) {
-      const row = await first(
-        'SELECT COUNT(*) AS n FROM messages WHERE car_id = ? AND ip = ? AND created_at >= ?',
-        String(carId),
-        String(ip),
-        Number(sinceMs)
-      );
-      return row ? Number(row.n) : 0;
-    },
-
     async bumpRateLimit(bucket, windowMs, limit) {
       return bumpRateLimit(bucket, windowMs, limit);
     },

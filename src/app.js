@@ -18,9 +18,9 @@ const views = require('./views');
 const SESSION_COOKIE = 'chezai_admin';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
-/** 扫码方限流：同一 IP 对同一辆车，10 分钟最多 6 次（留言 + 拨号合计） */
-const SCAN_WINDOW_MS = 10 * 60 * 1000;
-const SCAN_LIMIT = 6;
+/** 拨号打点的限流（只影响记录的写入，不影响用户能不能拨出去） */
+const CALL_WINDOW_MS = 10 * 60 * 1000;
+const CALL_LOG_LIMIT = 30;
 /** 后台登录限流 */
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_LIMIT = 10;
@@ -35,16 +35,10 @@ const SECURITY_HEADERS = {
     "connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
 };
 
-const SCAN_ERRORS = {
-  1: '操作太频繁了，请过几分钟再试。',
-  2: '请选择情况，或写下要告诉车主的内容。',
-  3: '内容太长了，请精简一下。',
-};
-
 const NOTICES = {
   created: { text: '已生成挪车码，下面可以直接下载或打印贴纸。', kind: 'info' },
   updated: { text: '已保存修改。', kind: 'info' },
-  deleted: { text: '已删除该车辆及其留言。', kind: 'info' },
+  deleted: { text: '已删除该车辆及其拨号记录。', kind: 'info' },
 };
 
 /* ---------------------------- 响应构造 ---------------------------- */
@@ -156,6 +150,16 @@ function createApp(options) {
 
   /* --------------------------- 扫码方 ----------------------------- */
 
+  /**
+   * 扫码页上「一键拨号」拨哪个号：
+   *   优先用「拨号号码」（隐私号 / 虚拟号），
+   *   没填就退回车主留的真实手机号 —— 没有隐私号服务的普通车主也能扫码即拨。
+   *   两个都没填才会没有按钮。
+   */
+  function dialNumberOf(car) {
+    return core.sanitizePhone(car.call_number) || core.sanitizePhone(car.phone);
+  }
+
   async function handleScan(req, url, params) {
     const car = await store.getCar(params[0]);
     if (!car) {
@@ -164,59 +168,7 @@ function createApp(options) {
     if (!car.enabled) {
       return pageResponse(403, '该挪车码已停用', '车主已关闭这个挪车码，暂时无法通过它联系车主。');
     }
-    const error = SCAN_ERRORS[url.searchParams.get('err')] || '';
-    return htmlResponse(
-      200,
-      views.scanPage(car, { error, callNumber: core.sanitizePhone(car.call_number) })
-    );
-  }
-
-  async function tooManyAttempts(carId, ip) {
-    const since = Date.now() - SCAN_WINDOW_MS;
-    const recent = await store.countRecentByIp(carId, ip, since);
-    return recent >= SCAN_LIMIT;
-  }
-
-  async function handlePostMessage(req, url, params) {
-    const car = await store.getCar(params[0]);
-    if (!car) {
-      return pageResponse(404, '挪车码不存在', '请确认二维码是否扫描完整，或联系车主索取新的贴纸。');
-    }
-    if (!car.enabled) {
-      return pageResponse(403, '该挪车码已停用', '车主已关闭这个挪车码，暂时无法通过它联系车主。');
-    }
-
-    // 先把 body 读完再判限流：Node 下如果带着未读的请求体直接回响应，
-    // 客户端可能收到连接重置而不是这个 302。
-    const form = core.parseForm(await req.readText());
-
-    if (await tooManyAttempts(car.id, req.ip)) {
-      return redirectResponse(`/c/${car.id}?err=1`);
-    }
-
-    const reason = core.truncate(String(form.reason || '').trim(), 40);
-    const content = String(form.content || '').trim();
-    const contact = core.truncate(String(form.contact || '').trim(), 60);
-
-    if (!reason && !content) return redirectResponse(`/c/${car.id}?err=2`);
-    if (content.length > 300) return redirectResponse(`/c/${car.id}?err=3`);
-
-    await store.addMessage({
-      car_id: car.id,
-      kind: 'message',
-      reason,
-      content,
-      contact,
-      ip: req.ip,
-      ua: core.truncate(req.userAgent, 200),
-    });
-    return redirectResponse(`/c/${car.id}/sent`);
-  }
-
-  async function handleSent(req, url, params) {
-    const car = await store.getCar(params[0]);
-    if (!car) return pageResponse(404, '挪车码不存在', '请确认二维码是否扫描完整。');
-    return htmlResponse(200, views.sentPage(car));
+    return htmlResponse(200, views.scanPage(car, { dialNumber: dialNumberOf(car) }));
   }
 
   async function handlePostCall(req, url, params) {
@@ -228,17 +180,18 @@ function createApp(options) {
     }
 
     const car = await store.getCar(params[0]);
-    if (!car || !car.enabled || !core.sanitizePhone(car.call_number)) {
+    if (!car || !car.enabled || !dialNumberOf(car)) {
       return jsonResponse(404, { ok: false });
     }
 
-    const allowed = await store.bumpRateLimit(`call:${req.ip}`, SCAN_WINDOW_MS, SCAN_LIMIT * 5);
+    const allowed = await store.bumpRateLimit(`call:${req.ip}`, CALL_WINDOW_MS, CALL_LOG_LIMIT);
     if (!allowed) return jsonResponse(429, { ok: false });
 
+    // 只记「有人点了一次拨号」，号码和通话内容一概不落库
     await store.addMessage({
       car_id: car.id,
       kind: 'call',
-      reason: '扫码人发起了拨号',
+      reason: '',
       content: '',
       contact: '',
       ip: req.ip,
@@ -412,8 +365,6 @@ function createApp(options) {
       async (req) => redirectResponse((await isAuthed(req)) ? '/admin' : '/admin/login'),
     ],
     ['GET', new RegExp(`^/c/${ID}$`), handleScan],
-    ['POST', new RegExp(`^/c/${ID}/message$`), handlePostMessage],
-    ['GET', new RegExp(`^/c/${ID}/sent$`), handleSent],
     ['POST', new RegExp(`^/c/${ID}/call$`), handlePostCall],
 
     ['GET', /^\/admin\/login$/, handleLoginForm],
