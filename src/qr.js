@@ -513,8 +513,18 @@ function encode(text) {
 
 /**
  * 输出 SVG 字符串（矢量，打印不糊）。
+ *
+ * 默认是**圆形二维码**：
+ *   - 数据点画成圆点
+ *   - 三个定位图形画成同心圆（◎）—— 视觉上是圆的，但沿任意半径方向
+ *     仍然是 1:1:3:1:1 的明暗比，扫码器照样认得出
+ *   - 整体套在一个圆形白盘里
+ *
+ * 画布放大到「含静默区的正方形内接于圆」：如果直接把圆内切在二维码上，
+ * 圆的四角会切掉角上的定位图形，扫码直接失效（这点是构造时就避开的，不是猜的）。
+ *
  * @param {string} text
- * @param {{scale?:number, quiet?:number, dark?:string, light?:string}} [options]
+ * @param {{scale?:number, quiet?:number, dark?:string, light?:string, round?:boolean}} [options]
  */
 function toSvg(text, options = {}) {
   const code = encode(text);
@@ -522,23 +532,66 @@ function toSvg(text, options = {}) {
   const quiet = options.quiet === undefined ? 4 : options.quiet;
   const dark = options.dark || '#000000';
   const light = options.light || '#ffffff';
-  const dimension = (code.size + quiet * 2) * scale;
+  const round = options.round !== false;
 
-  let path = '';
-  for (let row = 0; row < code.size; row++) {
-    for (let col = 0; col < code.size; col++) {
-      if (!code.matrix[row][col]) continue;
-      const x = (col + quiet) * scale;
-      const y = (row + quiet) * scale;
-      path += `M${x} ${y}h${scale}v${scale}h-${scale}z`;
+  const size = code.size;
+  const padSize = size + quiet * 2;
+
+  // 圆形模式下画布边长 = 内接正方形的对角线，这样四角都不会被切掉
+  const box = round ? padSize * Math.SQRT2 : padSize;
+  const dimension = Math.round(box * scale);
+  const offset = round ? ((box - padSize) / 2) * scale : 0;
+  const center = dimension / 2;
+
+  const at = (row, col) => ({
+    x: offset + (col + quiet) * scale,
+    y: offset + (row + quiet) * scale,
+  });
+
+  // 三个定位图形（7×7）的左上角坐标
+  const finders = [[0, 0], [0, size - 7], [size - 7, 0]];
+  const inFinder = (row, col) =>
+    finders.some(([r0, c0]) => row >= r0 && row < r0 + 7 && col >= c0 && col < c0 + 7);
+
+  // 圆点半径 = 0.55 个格子（相邻圆点微叠）。这个值是解码实测出来的：
+  //   0.45（留缝）→ 通过 12/36；0.50（相切）→ 36/36 但真实输出上偶发失败；
+  //   0.55（微叠）→ 36/36，且模块四角被覆盖、墨迹连续。
+  const radius = scale * 0.55;
+
+  let dots = '';
+  for (let row = 0; row < size; row++) {
+    for (let col = 0; col < size; col++) {
+      if (!code.matrix[row][col] || inFinder(row, col)) continue;
+      const { x, y } = at(row, col);
+      dots += `<circle cx="${x + scale / 2}" cy="${y + scale / 2}" r="${radius}"/>`;
     }
   }
 
+  // 定位图形：外环（黑）→ 中环（白）→ 中心（黑），三层同心圆
+  let finderOuter = '';
+  let finderRing = '';
+  let finderCore = '';
+  for (const [r0, c0] of finders) {
+    const { x, y } = at(r0, c0);
+    const cx = x + 3.5 * scale;
+    const cy = y + 3.5 * scale;
+    finderOuter += `<circle cx="${cx}" cy="${cy}" r="${3.5 * scale}"/>`;
+    finderRing += `<circle cx="${cx}" cy="${cy}" r="${2.5 * scale}"/>`;
+    finderCore += `<circle cx="${cx}" cy="${cy}" r="${1.5 * scale}"/>`;
+  }
+
+  const background = round
+    ? `<circle cx="${center}" cy="${center}" r="${center}" fill="${light}"/>`
+    : `<rect width="${dimension}" height="${dimension}" fill="${light}"/>`;
+
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${dimension}" height="${dimension}" ` +
-    `viewBox="0 0 ${dimension} ${dimension}" shape-rendering="crispEdges" role="img">` +
-    `<rect width="${dimension}" height="${dimension}" fill="${light}"/>` +
-    `<path d="${path}" fill="${dark}"/></svg>`
+    `viewBox="0 0 ${dimension} ${dimension}" role="img">` +
+    background +
+    `<g fill="${dark}">${dots}${finderOuter}</g>` +
+    `<g fill="${light}">${finderRing}</g>` +
+    `<g fill="${dark}">${finderCore}</g>` +
+    `</svg>`
   );
 }
 

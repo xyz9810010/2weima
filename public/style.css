@@ -945,8 +945,10 @@ textarea:focus {
 }
 
 .sticker-square .sticker-qr {
-  width: 32mm;
-  height: 32mm;
+  /* 圆形二维码是「圆盘内接正方形」，有效编码区约为框宽的 71%，
+     所以框比方形版放大一点，保证模块尺寸不缩水 */
+  width: 34mm;
+  height: 34mm;
   margin: 1.2mm 0;
 }
 
@@ -966,8 +968,8 @@ textarea:focus {
 }
 
 .sticker-rect .sticker-qr {
-  width: 40mm;
-  height: 40mm;
+  width: 42mm;
+  height: 42mm;
   flex: 0 0 auto;
   margin: 0;
 }
@@ -981,22 +983,22 @@ textarea:focus {
 }
 
 .sticker-rect .sticker-title {
-  font-size: 15pt;
+  font-size: 19pt;
   font-weight: 800;
   letter-spacing: 2px;
   line-height: 1.1;
 }
 
 .sticker-rect .sticker-sub {
-  font-size: 7pt;
+  font-size: 9pt;
   letter-spacing: 0.5px;
-  color: #333;
+  color: #222;
 }
 
 .sticker-rect .sticker-tip {
-  font-size: 7pt;
+  font-size: 9pt;
   line-height: 1.45;
-  color: #222;
+  color: #111;
 }
 
 .sticker-qr svg {
