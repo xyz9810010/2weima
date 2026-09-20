@@ -48,6 +48,7 @@ const PUBLIC_ORIGIN = (() => {
 const STATIC_FILES = {
   '/style.css': { name: 'style.css', type: 'text/css; charset=utf-8' },
   '/app.js': { name: 'app.js', type: 'application/javascript; charset=utf-8' },
+  '/favicon.svg': { name: 'favicon.svg', type: 'image/svg+xml' },
 };
 
 /* ------------------------------------------------------------------ */

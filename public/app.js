@@ -101,6 +101,9 @@
       document.body.appendChild(host);
     }
 
+    // 只留最新一条：连着做两个操作时，堆叠起来反而看不清哪句是刚才那次
+    host.innerHTML = '';
+
     var el = document.createElement('div');
     el.className = 'toast' + (kind === 'error' ? ' toast-error' : '');
     el.textContent = text;
@@ -141,11 +144,20 @@
     var action = form.getAttribute('action') || window.location.pathname;
     setPending(form, true);
 
+    // 必须发 urlencoded，不能用 FormData：
+    // FormData 会变成 multipart/form-data，而服务端（Node 与 Worker 共用）只用
+    // URLSearchParams 解析表单 —— 那样提交上去的字段全是空的，
+    // 保存就等于把车牌号码清空。这一条是踩过的坑。
+    var encoded = new URLSearchParams(new FormData(form)).toString();
+
     fetch(action, {
       method: 'POST',
-      body: new FormData(form),
+      body: encoded,
       credentials: 'same-origin',
-      headers: { 'X-Requested-With': 'fetch' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        'X-Requested-With': 'fetch',
+      },
     })
       .then(function (res) {
         var type = res.headers.get('content-type') || '';

@@ -60,10 +60,24 @@ function fmtTime(ms) {
   );
 }
 
-/** application/x-www-form-urlencoded → 普通对象 */
+/**
+ * application/x-www-form-urlencoded → 普通对象
+ *
+ * 刻意**只支持 urlencoded**（Node 与 Workers 共用，不想两边各写一个 multipart 解析器）。
+ * 但必须能识别出「这不是 urlencoded」，见下面的 multipart 判断 ——
+ * 否则会把 multipart 的请求体解析成一个空对象，然后拿着空字段去写库，
+ * 把用户已有的车牌、号码整个清掉。宁可报错，也不能静默清空。
+ */
 function parseForm(raw) {
+  const text = String(raw === null || raw === undefined ? '' : raw);
   const out = {};
-  for (const [key, value] of new URLSearchParams(raw || '')) {
+
+  if (/^\s*--/.test(text)) {
+    out.__unparsed = 'multipart/form-data';
+    return out;
+  }
+
+  for (const [key, value] of new URLSearchParams(text)) {
     out[key] = value;
   }
   return out;

@@ -267,8 +267,10 @@ function createApp(options) {
     const cars = (await store.listCars()).filter((car) => car.enabled && !car.owner_id);
 
     if (cars.length === 0) {
+      // 用 200：这是一张内容正常的说明页，不是「资源不存在」。
+      // 404 会让浏览器控制台报错，也让监控误判。
       return pageResponse(
-        404,
+        200,
         '暂时无法联系车主',
         '车主还没有启用挪车码，或者所有车辆都已停用。'
       );
@@ -359,7 +361,10 @@ function createApp(options) {
     if (!car) {
       return pageResponse(404, '链接无效', '这个管理链接不对或已失效。请向给你链接的人索取新的链接。');
     }
-    const fields = collectCarFields(core.parseForm(await req.readText()));
+    const raw = core.parseForm(await req.readText());
+    const unparsable = unparsableResponse(req, raw);
+    if (unparsable) return unparsable;
+    const fields = collectCarFields(raw);
     await store.updateCar(car.id, fields);
     return redirectResponse(`/edit/${params[0]}?notice=saved`);
   }
@@ -415,6 +420,8 @@ function createApp(options) {
 
   async function handleLoginSubmit(req) {
     const form = core.parseForm(await req.readText());
+    const unparsable = unparsableResponse(req, form);
+    if (unparsable) return unparsable;
     const contact = normalizeContact(form.contact);
     const password = String(form.password || '');
 
@@ -461,6 +468,8 @@ function createApp(options) {
 
   async function handleSignupSubmit(req) {
     const form = core.parseForm(await req.readText());
+    const unparsable = unparsableResponse(req, form);
+    if (unparsable) return unparsable;
     const contact = normalizeContact(form.contact);
     const name = core.truncate(String(form.name || '').trim(), 20);
     const password = String(form.password || '');
@@ -490,6 +499,21 @@ function createApp(options) {
   }
 
   /* --------------------------- 车主 / 平台后台 --------------------------- */
+
+  /**
+   * 请求体解析不出来时的统一处理。
+   *
+   * 存在的意义：`parseForm` 只认 urlencoded。如果哪天客户端改回 multipart，
+   * 解析结果会是一个空对象 —— 拿它去写库就等于把用户已有的车牌、号码清空。
+   * 所以宁可明确报错，也绝不静默写入空值。
+   */
+  function unparsableResponse(req, form) {
+    if (!form.__unparsed) return null;
+    const text = '提交的数据格式无法识别，这次没有保存任何内容。请刷新页面后重试。';
+    return wantsFragments(req)
+      ? jsonResponse(400, { ok: false, notice: text, kind: 'error' })
+      : pageResponse(400, '提交失败', text);
+  }
 
   /** 首屏和「局部刷新」共用同一份数据加载，避免两边算出不一样的结果 */
   async function loadDashboard(session, req) {
@@ -646,7 +670,10 @@ function createApp(options) {
   async function handleCreateCar(req, url) {
     const session = await currentSession(req);
     if (!session) return redirectResponse('/login');
-    const fields = collectCarFields(core.parseForm(await req.readText()));
+    const raw = core.parseForm(await req.readText());
+    const unparsable = unparsableResponse(req, raw);
+    if (unparsable) return unparsable;
+    const fields = collectCarFields(raw);
 
     // 空表单不建记录：否则后台很快堆满「未填写车牌」，通用码还会把它们列给扫码人看
     if (!carHasIdentity(fields)) {
@@ -676,7 +703,10 @@ function createApp(options) {
     // 修改**不做**「必须有车牌或号码」的校验：改一条已有记录时，
     // 用户很可能只动一个字段（比如只填个称呼），不能因为别的字段是空的就不让存。
     // 那条校验只拦「新建」，目的是别让后台堆满空白记录。
-    const fields = collectCarFields(core.parseForm(await req.readText()));
+    const raw = core.parseForm(await req.readText());
+    const unparsable = unparsableResponse(req, raw);
+    if (unparsable) return unparsable;
+    const fields = collectCarFields(raw);
     await store.updateCar(found.car.id, fields);
     return afterChange(session, req, url, 'updated');
   }

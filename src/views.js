@@ -17,6 +17,8 @@ function layout({ title, body, bodyClass = '' }) {
 <meta name="robots" content="noindex, nofollow">
 <meta name="format-detection" content="telephone=no">
 <title>${esc(title)}</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/favicon.svg">
 <link rel="stylesheet" href="/style.css">
 <script src="/app.js" defer></script>
 </head>

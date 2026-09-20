@@ -623,6 +623,12 @@ textarea:focus {
   gap: 12px;
 }
 
+/* 窄屏上「启用中」会被旁边的长文字挤成一列一个字，这里不让它被压缩 */
+.car-head > .badge {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .car-plate {
   font-size: 20px;
   font-weight: 700;

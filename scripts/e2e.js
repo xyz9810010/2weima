@@ -128,7 +128,7 @@ async function run() {
   {
     const root = await get('/');
     check('根路径是扫码方页面，不再跳后台', root.location === '', root.location);
-    check('还没建车时根路径给出人话提示', root.status === 404 && root.text.includes('暂时无法联系车主'), root.status);
+    check('还没建车时根路径给出人话提示', root.status === 200 && root.text.includes('暂时无法联系车主'), root.status);
   }
   check('未登录访问 /admin 跳登录页', (await get('/admin')).location === '/login');
   check('未登录访问 /me 跳登录页', (await get('/me')).location === '/login');
@@ -391,7 +391,7 @@ async function run() {
     const { toSvg } = require('../src/qr.js');
 
     // 上一节把车都删光了，正好先测「什么都没有」的情况
-    check('一辆车都没有时根路径给出提示', (await get('/')).status === 404);
+    check('一辆车都没有时根路径给出提示', (await get('/')).status === 200);
 
     const adminRow = await get('/admin');
     check('后台顶部展示通用二维码', adminRow.text.includes('通用二维码'));
@@ -465,7 +465,7 @@ async function run() {
     check('通用贴纸不印任何车牌', !uniPrint.text.includes('浙A·77777') && !uniPrint.text.includes('苏D·12345'));
 
     for (const c of codes) await post(`/admin/cars/${c}/delete`);
-    check('全部删掉后根路径又给出提示', (await get('/')).status === 404);
+    check('全部删掉后根路径又给出提示', (await get('/')).status === 200);
   }
 
   section('9. 多租户：每个车主一个账号，互相看不见');
@@ -797,7 +797,49 @@ async function run() {
     check('测试车已清理', (await get('/admin')).text.includes('车辆与贴纸'));
   }
 
-  section('15. 会话与越权');
+  section('15. 请求编码：解析失败绝不能清空数据');
+  {
+    // 真实浏览器曾经发过 multipart/form-data（fetch + FormData），
+    // 而服务端只用 URLSearchParams 解析 —— 解析出来是空对象，
+    // 保存一次就会把车牌和号码整个清掉。这条断言钉的就是这个。
+    const list = await get('/admin');
+    const known = new Set((list.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)));
+    await post('/cars', {
+      plate_province: '粤', plate_city: 'D', plate_rest: '7Z8Y9',
+      owner_name: '', phone: '', call_number: '13800138000', note: '', enabled: 'on',
+    });
+    const withCar = await get('/admin');
+    const code = [...new Set((withCar.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)))]
+      .find((c) => !known.has(c));
+    check('建了一辆用于编码测试的车 ' + code, Boolean(code));
+
+    if (code) {
+      const multipart =
+        '------WebKitFormBoundaryE2E\r\n' +
+        'Content-Disposition: form-data; name="plate_rest"\r\n\r\n\r\n' +
+        '------WebKitFormBoundaryE2E--\r\n';
+      const res = await fetch(`${BASE}/cars/${code}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'multipart/form-data; boundary=----WebKitFormBoundaryE2E',
+          'X-Requested-With': 'fetch',
+          cookie,
+        },
+        body: multipart,
+        redirect: 'manual',
+      });
+      check('multipart 请求被明确拒绝（不是静默写入空值）', res.status === 400, res.status);
+
+      const after = await get('/admin');
+      check('【安全】被拒绝后车牌还在（不会被清空）', after.text.includes('粤D·7Z8Y9'), '车牌被清掉了！');
+      check('【安全】被拒绝后号码还在', after.text.includes('13800138000'), '号码被清掉了！');
+
+      await post(`/cars/${code}/delete`);
+      check('清掉编码测试车', !(await get('/admin')).text.includes('粤D·7Z8Y9'));
+    }
+  }
+
+  section('16. 会话与越权');
   check('登出 = 302', (await post('/logout')).location === '/login');
   check('登出后后台跳登录页', (await get('/admin')).location === '/login');
   const anon = await post('/cars', { plate: '伪造' }, { auth: false });
