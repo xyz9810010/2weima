@@ -922,8 +922,10 @@ textarea:focus {
 }
 
 /* 正方形两款：50×50mm 与 60×60mm。
-   50mm 太小，塞不下「大二维码 + 看得清的字」，所以去掉装饰性的副标题，
-   把字号让给标题和提示；要两者都要，用 60mm 那款。 */
+   三行文字（标题 / 副标题 / 提示）各占一行高度，二维码能拿到的就是剩下的部分。
+   下面的数字是「文字刚好放得下、二维码取最大」的实测结果：
+   50mm 款可用高 46.5mm = 标题 4.5 + 副标题 2.2 + 二维码 34.5 + 上下留白 2 + 提示 2.9；
+   60mm 款可用高 55.5mm = 标题 5.7 + 副标题 3.3 + 二维码 40.5 + 上下留白 2 + 提示 3.5。 */
 .sticker-square,
 .sticker-square6 {
   flex-direction: column;
@@ -957,25 +959,37 @@ textarea:focus {
   font-size: 14pt;
 }
 
-/* 款式里都不再放副标题（装饰性文字，占地方） */
 .sticker-square .sticker-sub,
 .sticker-square6 .sticker-sub {
-  display: none;
+  color: #333;
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+}
+
+.sticker-square .sticker-sub {
+  font-size: 5.5pt;
+  margin-top: 0.3mm;
+}
+
+.sticker-square6 .sticker-sub {
+  font-size: 8pt;
+  margin-top: 0.5mm;
 }
 
 .sticker-square .sticker-qr,
 .sticker-square6 .sticker-qr {
+  flex: 0 0 auto;
   margin: 1mm 0;
 }
 
 .sticker-square .sticker-qr {
-  width: 37mm;
-  height: 37mm;
+  width: 34.5mm;
+  height: 34.5mm;
 }
 
 .sticker-square6 .sticker-qr {
-  width: 44mm;
-  height: 44mm;
+  width: 40.5mm;
+  height: 40.5mm;
 }
 
 .sticker-square .sticker-tip,

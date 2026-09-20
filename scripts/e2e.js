@@ -285,10 +285,23 @@ async function run() {
       check(`${label}贴纸不印编号`, !body.includes(code));
     }
 
-    // 布局优化：两款正方形都不印副标题，把高度让给二维码（长方形够宽，保留副标题）
-    check('5×5 贴纸去掉装饰副标题', !square.text.split('<p class="print-note">')[0].includes('临时停靠'));
-    check('6×6 贴纸去掉装饰副标题', !square6.text.split('<p class="print-note">')[0].includes('临时停靠'));
-    check('长方形贴纸保留副标题', rect.text.split('<p class="print-note">')[0].includes('临时停靠'));
+    // 文案三行：标题「扫码挪车」/ 副标题「临时停靠 · 请多包涵」/ 提示「车辆挡路请扫码联系车主」，三款都有
+    for (const [label, html] of [['5×5', square.text], ['6×6', square6.text], ['长方形', rect.text]]) {
+      const body = (html.split('<div class="sticker ')[1] || '').split('<p class="print-note">')[0];
+      check(`${label}贴纸有副标题「临时停靠 · 请多包涵」`, body.includes('临时停靠 · 请多包涵'), '副标题没了');
+      check(`${label}贴纸有提示「车辆挡路请扫码…」`, body.includes('车辆挡路请扫码'), '提示没了');
+    }
+    // 正方形是竖排：副标题在二维码之前；长方形是横排（码在左、字在右），不套这个顺序
+    check(
+      '5×5 竖排顺序：标题 → 副标题 → 二维码',
+      square.text.indexOf('临时停靠') < square.text.indexOf('<svg'),
+      '顺序不对'
+    );
+    check(
+      '6×6 竖排顺序：标题 → 副标题 → 二维码',
+      square6.text.indexOf('临时停靠') < square6.text.indexOf('<svg'),
+      '顺序不对'
+    );
 
     // 非法 / 未知尺寸一律回落到方形，不能白屏
     const bogus = await get(`/admin/cars/${code}/print?size=big`);

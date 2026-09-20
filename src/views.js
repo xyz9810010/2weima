@@ -607,7 +607,9 @@ function adminPage({
  * 所以贴纸只保留「让人扫码」这件事本身，外观完全通用，
  * 换车、换牌、换号码都不用重印。
  *
- * 两款正方形都不印副标题：50mm 见方的地方，一行装饰字就够把二维码挤小一圈。
+ * 文案三行：标题「扫码挪车」/ 副标题「临时停靠 · 请多包涵」/ 提示「车辆挡路请扫码联系车主」。
+ * 副标题要多占一行高度，二维码就得让出相应的高度 —— 每款让多少是按实测定的，
+ * 让到「文字刚好放得下、二维码取最大」，见 public/style.css 里各尺寸的注释。
  */
 const STICKER_SIZES = {
   square: '5×5cm 正方形',
@@ -621,20 +623,21 @@ function stickerSizeOf(value) {
 
 function sticker(car, { qrSvg, size = 'square' }) {
   const key = stickerSizeOf(size);
+  const head = `<div class="sticker-title">扫码挪车</div>
+    <div class="sticker-sub">临时停靠 · 请多包涵</div>`;
 
   if (key === 'rect') {
     return `<div class="sticker sticker-rect">
     <div class="sticker-qr">${qrSvg}</div>
     <div class="sticker-text">
-      <div class="sticker-title">扫码挪车</div>
-      <div class="sticker-sub">临时停靠 · 请多包涵</div>
+      ${head}
       <div class="sticker-tip">车辆挡路请扫码<br>一键拨号联系车主</div>
     </div>
   </div>`;
   }
 
   return `<div class="sticker sticker-${key}">
-    <div class="sticker-title">扫码挪车</div>
+    ${head}
     <div class="sticker-qr">${qrSvg}</div>
     <div class="sticker-tip">车辆挡路请扫码联系车主</div>
   </div>`;
