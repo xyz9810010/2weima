@@ -63,6 +63,22 @@ PUBLIC_BASE_URL = "https://chezai-qrcode.<你的账号>.workers.dev"
   D1 没有跨语句事务，所以登录限流是「读-写」两步，理论上并发时能多放过去几次——
   对这个场景可以接受（密码本身是高熵 secret，不是靠限流兜底）。
 
+### 部署后打不开？先看这三条
+
+部署完发现「调用次数 0、页面打不开」，按顺序排这三件事，能覆盖绝大多数情况：
+
+1. **没有任何 URL** —— Cloudflare 上新建的 Worker，`workers.dev` 路由默认可能是关的。
+   Worker → 设置 → 域和路由 → 启用 `workers.dev`（或者绑一个自定义域名）。
+   入口没开的话，访问量永远是 0，也不会有任何日志。
+2. **`database_id` 还是占位字符串** —— 打开 `/` 或 `/admin` 直接 500，多半是这个。
+   注意 `wrangler deploy --dry-run` **不会**因此报错（它只做本地打包），
+   所以「部署成功但一访问就报错」比「部署失败」更常见。先 `wrangler d1 create` 再部署。
+3. **没设 `ADMIN_PASSWORD` secret** —— 后台登录页会明确提示「尚未配置管理密码」。
+   设完 secret 需要重新部署一次才会生效。
+
+另外建议顺手把 Observability 里的 **Workers Logs 打开**（默认可能是禁用的），
+否则线上出问题只能靠猜；打开后用 `npx wrangler tail` 或面板都能看到真实的报错。
+
 ### 本地开发 Worker
 
 ```bash
