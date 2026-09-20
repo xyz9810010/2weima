@@ -8,9 +8,14 @@
 #   5. npx wrangler deploy
 #   6. 拿到 <名字>.<账号>.workers.dev 后填进 PUBLIC_BASE_URL，再 deploy 一次
 
-name = "chezai-qrcode"
+name = "2weima"
 main = "src/worker.js"
 compatibility_date = "2024-09-23"
+
+# 显式写出来，免得每次部署都提示「未设置，将按默认值启用」
+workers_dev = true
+# 预览 URL 也是一个公开入口，这个后台里有车主资料，不需要就关掉
+preview_urls = false
 
 # public/ 下的 style.css 与 app.js 由 Cloudflare 边缘直接托管。
 # 这里显式给了 binding，所以 Worker 一定先跑，未命中路由的请求再由 Worker 转交给 ASSETS，
@@ -29,4 +34,4 @@ TZ_OFFSET_HOURS = "8"
 [[d1_databases]]
 binding = "DB"
 database_name = "chezai-qrcode"
-database_id = "把 wrangler d1 create 输出的 database_id 粘到这里"
+database_id = "ae0bfb75-7af3-4be9-ac78-4e68f0ad83a5"
