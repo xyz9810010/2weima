@@ -596,46 +596,59 @@ function adminPage({
 /* ------------------------------------------------------------------ */
 
 /**
- * 贴纸。两种尺寸：
- *   square = 50mm × 50mm 正方形（小巧，贴后视镜/角落）
- *   rect   = 100mm × 50mm 长方形（二维码在左、文字在右，贴挡风玻璃正合适）
+ * 贴纸。三种尺寸：
+ *   square  = 50mm × 50mm 正方形（小巧，贴后视镜/角落）
+ *   square6 = 60mm × 60mm 正方形（二维码最大，字也看得清）
+ *   rect    = 100mm × 50mm 长方形（二维码在左、文字在右，贴挡风玻璃正合适）
  *
  * 刻意**不印车牌、也不印编号**：
  *   - 车牌和号码都是扫码那一刻从数据库现查的，印上去只会变成过期信息
  *   - 编号是内部标识，贴在玻璃上对扫码人没有意义
  * 所以贴纸只保留「让人扫码」这件事本身，外观完全通用，
  * 换车、换牌、换号码都不用重印。
+ *
+ * 两款正方形都不印副标题：50mm 见方的地方，一行装饰字就够把二维码挤小一圈。
  */
-function sticker(car, { qrSvg, size = 'square' }) {
-  const head = `<div class="sticker-title">扫码挪车</div>
-    <div class="sticker-sub">临时停靠 · 请多包涵</div>`;
+const STICKER_SIZES = {
+  square: '5×5cm 正方形',
+  square6: '6×6cm 正方形',
+  rect: '10×5cm 长方形',
+};
 
-  if (size === 'rect') {
+function stickerSizeOf(value) {
+  return STICKER_SIZES[value] ? value : 'square';
+}
+
+function sticker(car, { qrSvg, size = 'square' }) {
+  const key = stickerSizeOf(size);
+
+  if (key === 'rect') {
     return `<div class="sticker sticker-rect">
     <div class="sticker-qr">${qrSvg}</div>
     <div class="sticker-text">
-      ${head}
+      <div class="sticker-title">扫码挪车</div>
+      <div class="sticker-sub">临时停靠 · 请多包涵</div>
       <div class="sticker-tip">车辆挡路请扫码<br>一键拨号联系车主</div>
     </div>
   </div>`;
   }
 
-  return `<div class="sticker sticker-square">
-    ${head}
+  return `<div class="sticker sticker-${key}">
+    <div class="sticker-title">扫码挪车</div>
     <div class="sticker-qr">${qrSvg}</div>
     <div class="sticker-tip">车辆挡路请扫码联系车主</div>
   </div>`;
 }
 
-/** 打印页上的尺寸切换（两个链接，当前那个高亮） */
+/** 打印页上的尺寸切换（当前那个高亮） */
 function sizeSwitch(path, size) {
   const link = (key, label) =>
     `<a class="btn btn-xs ${size === key ? 'btn-primary' : 'btn-ghost'}" href="${esc(path)}?size=${key}">${label}</a>`;
-  return `<span class="size-switch">尺寸：${link('square', '5×5 方形')}${link('rect', '10×5 长方形')}</span>`;
+  return `<span class="size-switch">尺寸：${link('square', '5×5 方形')}${link('square6', '6×6 方形')}${link('rect', '10×5 长方形')}</span>`;
 }
 
 function printPage(car, { baseUrl, qrSvg, universal = false, size = 'square', path = '' }) {
-  const label = size === 'rect' ? '10×5cm 长方形' : '5×5cm 正方形';
+  const label = STICKER_SIZES[stickerSizeOf(size)];
   return layout({
     title: universal ? `挪车贴纸 · 通用 · ${label}` : `挪车贴纸 · ${label}`,
     bodyClass: 'print-body',
@@ -662,7 +675,7 @@ ${sticker(car, { qrSvg, size })}
 
 /** 批量打印：把启用中的每辆车各出一张贴纸，排在一页里一次打完 */
 function printAllPage({ cars, baseUrl, size = 'square', path = '/print-all' }) {
-  const label = size === 'rect' ? '10×5cm 长方形' : '5×5cm 正方形';
+  const label = STICKER_SIZES[stickerSizeOf(size)];
   const sheet = cars.length
     ? cars
         .map(
@@ -706,4 +719,6 @@ module.exports = {
   userListHtml,
   printPage,
   printAllPage,
+  stickerSizeOf,
+  STICKER_SIZES,
 };

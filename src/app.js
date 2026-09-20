@@ -133,9 +133,9 @@ function createApp(options) {
 
   const baseUrlOf = (req) => publicBaseUrl || req.origin;
 
-  /** 贴纸尺寸：square = 5×5cm 方形（默认），rect = 10×5cm 长方形 */
+  /** 贴纸尺寸：square = 5×5cm 方形（默认），square6 = 6×6cm 方形，rect = 10×5cm 长方形 */
   function stickerSize(url) {
-    return url && url.searchParams.get('size') === 'rect' ? 'rect' : 'square';
+    return views.stickerSizeOf(url && url.searchParams.get('size'));
   }
 
   /* ----------------------------- 会话 ----------------------------- */

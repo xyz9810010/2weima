@@ -533,14 +533,18 @@ function toSvg(text, options = {}) {
   const dark = options.dark || '#000000';
   const light = options.light || '#ffffff';
   const round = options.round !== false;
+  // 画布要不要留「内接于圆」的对角线余量。贴纸已经不做圆形裁剪，所以默认**不留**：
+  // 这一项以前是默认开的（box = padSize × √2），结果 44mm 的贴纸框里二维码本体只有 27mm，
+  // 四周一大圈白边 —— 白白浪费掉 41% 的边长。要圆盘裁剪时才显式开。
+  const circular = options.circular === true;
 
   const size = code.size;
   const padSize = size + quiet * 2;
 
   // 圆形模式下画布边长 = 内接正方形的对角线，这样四角都不会被切掉
-  const box = round ? padSize * Math.SQRT2 : padSize;
+  const box = circular ? padSize * Math.SQRT2 : padSize;
   const dimension = Math.round(box * scale);
-  const offset = round ? ((box - padSize) / 2) * scale : 0;
+  const offset = circular ? ((box - padSize) / 2) * scale : 0;
   const center = dimension / 2;
 
   const at = (row, col) => ({

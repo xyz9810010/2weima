@@ -259,19 +259,25 @@ async function run() {
     check('单张贴纸本体不印编号', !body.includes(code), '编号露在贴纸上了');
   }
 
-  // 两款尺寸：5×5cm 方形 / 10×5cm 长方形
+  // 三款尺寸：5×5cm 方形 / 6×6cm 方形 / 10×5cm 长方形
   {
     const def = await get(`/admin/cars/${code}/print`);
     check('默认尺寸是 5×5 方形', def.text.includes('class="sticker sticker-square"'), '默认不是方形');
-    check('打印页有两个尺寸切换入口', def.text.includes('?size=square') && def.text.includes('?size=rect'));
+    check(
+      '打印页有三个尺寸切换入口',
+      def.text.includes('?size=square') && def.text.includes('?size=square6') && def.text.includes('?size=rect')
+    );
 
     const square = await get(`/admin/cars/${code}/print?size=square`);
+    const square6 = await get(`/admin/cars/${code}/print?size=square6`);
     const rect = await get(`/admin/cars/${code}/print?size=rect`);
     check('?size=square 出方形贴纸', square.text.includes('class="sticker sticker-square"'));
+    check('?size=square6 出 6×6 方形贴纸', square6.text.includes('class="sticker sticker-square6"'), '没有 6×6');
+    check('6×6 顶部文案标了尺寸', square6.text.includes('6×6cm 正方形'), '标题没写尺寸');
     check('?size=rect 出长方形贴纸', rect.text.includes('class="sticker sticker-rect"'), '没有长方形');
     check('长方形版二维码在左、文字在右', /sticker-rect">\s*<div class="sticker-qr">/.test(rect.text));
 
-    for (const [label, html] of [['方形', square.text], ['长方形', rect.text]]) {
+    for (const [label, html] of [['方形', square.text], ['6×6 方形', square6.text], ['长方形', rect.text]]) {
       const body = (html.split('<div class="sticker ')[1] || '').split('<p class="print-note">')[0];
       check(`${label}贴纸有二维码`, body.includes('<svg'));
       check(`${label}贴纸有「扫码挪车」`, body.includes('扫码挪车'));
@@ -279,9 +285,32 @@ async function run() {
       check(`${label}贴纸不印编号`, !body.includes(code));
     }
 
+    // 布局优化：两款正方形都不印副标题，把高度让给二维码（长方形够宽，保留副标题）
+    check('5×5 贴纸去掉装饰副标题', !square.text.split('<p class="print-note">')[0].includes('临时停靠'));
+    check('6×6 贴纸去掉装饰副标题', !square6.text.split('<p class="print-note">')[0].includes('临时停靠'));
+    check('长方形贴纸保留副标题', rect.text.split('<p class="print-note">')[0].includes('临时停靠'));
+
     // 非法 / 未知尺寸一律回落到方形，不能白屏
     const bogus = await get(`/admin/cars/${code}/print?size=big`);
     check('未知尺寸回落到方形', bogus.status === 200 && bogus.text.includes('sticker-square'), bogus.status);
+
+    // 二维码本体必须铺满画布。
+    // 曾经画布按「含静默区的正方形内接于圆」放大 √2（为圆形轮廓留的），
+    // 结果 44mm 的贴纸框里二维码本体只有 26mm，四周一大圈白边 —— 白扔 41% 的边长。
+    {
+      const { toSvg, encode } = require('../src/qr.js');
+      const sample = `${BASE}/c/AbCdEfGhIj`;
+      const canvasModules = Number(/width="(\d+)"/.exec(toSvg(sample, { scale: 8, quiet: 3 }))[1]) / 8;
+      const cover = encode(sample).size / canvasModules;
+      check('二维码本体铺满画布（没留圆形白边）', cover >= 0.8, `本体只占画布 ${(cover * 100).toFixed(0)}%`);
+      const circleModules =
+        Number(/width="(\d+)"/.exec(toSvg(sample, { scale: 8, quiet: 3, circular: true }))[1]) / 8;
+      check(
+        '只有显式开启圆形裁剪时才留 √2 对角线余量',
+        Math.abs(circleModules / canvasModules - Math.SQRT2) < 0.03,
+        `${circleModules} / ${canvasModules}`
+      );
+    }
   }
   check('静态 /style.css = 200', (await get('/style.css')).status === 200);
   check('静态 /app.js = 200', (await get('/app.js')).status === 200);
@@ -456,10 +485,17 @@ async function run() {
       printAll.text.includes('浙A·77777') && printAll.text.includes('苏D·12345')
     );
     check('批量打印页不出现任何编号', !/编号/.test(printAll.text.split('<div class="sticker-sheet">')[0]), '标题区出现了编号');
-    check('批量打印默认方形', (printAll.text.match(/sticker-square/g) || []).length === 2);
+    check('批量打印默认方形', (printAll.text.match(/class="sticker sticker-square"/g) || []).length === 2);
 
     const printAllRect = await get('/print-all?size=rect');
     check('批量打印可切长方形', (printAllRect.text.match(/sticker-rect/g) || []).length === 2, '长方形批量失败');
+
+    const printAll6 = await get('/print-all?size=square6');
+    check(
+      '批量打印可切 6×6 方形',
+      (printAll6.text.match(/class="sticker sticker-square6"/g) || []).length === 2,
+      '6×6 批量失败'
+    );
 
     const uniPrint = await get('/admin/print-universal');
     check('通用贴纸打印页 = 200', uniPrint.status === 200 && uniPrint.text.includes('通用贴纸'));

@@ -921,40 +921,74 @@ textarea:focus {
   -webkit-print-color-adjust: exact;
 }
 
-/* 正方形 50mm × 50mm */
-.sticker-square {
-  width: 50mm;
-  height: 50mm;
-  padding: 2mm;
+/* 正方形两款：50×50mm 与 60×60mm。
+   50mm 太小，塞不下「大二维码 + 看得清的字」，所以去掉装饰性的副标题，
+   把字号让给标题和提示；要两者都要，用 60mm 那款。 */
+.sticker-square,
+.sticker-square6 {
   flex-direction: column;
   text-align: center;
 }
 
-.sticker-square .sticker-title {
-  font-size: 9pt;
+.sticker-square {
+  width: 50mm;
+  height: 50mm;
+  padding: 1.5mm;
+}
+
+.sticker-square6 {
+  width: 60mm;
+  height: 60mm;
+  padding: 2mm;
+}
+
+.sticker-square .sticker-title,
+.sticker-square6 .sticker-title {
   font-weight: 800;
   letter-spacing: 1px;
   line-height: 1.15;
 }
 
-.sticker-square .sticker-sub {
-  font-size: 5.5pt;
-  letter-spacing: 0.5px;
-  color: #333;
-  margin-top: 0.4mm;
+.sticker-square .sticker-title {
+  font-size: 11pt;
+}
+
+.sticker-square6 .sticker-title {
+  font-size: 14pt;
+}
+
+/* 款式里都不再放副标题（装饰性文字，占地方） */
+.sticker-square .sticker-sub,
+.sticker-square6 .sticker-sub {
+  display: none;
+}
+
+.sticker-square .sticker-qr,
+.sticker-square6 .sticker-qr {
+  margin: 1mm 0;
 }
 
 .sticker-square .sticker-qr {
-  /* 圆形二维码是「圆盘内接正方形」，有效编码区约为框宽的 71%，
-     所以框比方形版放大一点，保证模块尺寸不缩水 */
-  width: 38mm;
-  height: 38mm;
-  margin: 1.2mm 0;
+  width: 37mm;
+  height: 37mm;
+}
+
+.sticker-square6 .sticker-qr {
+  width: 44mm;
+  height: 44mm;
+}
+
+.sticker-square .sticker-tip,
+.sticker-square6 .sticker-tip {
+  line-height: 1.25;
 }
 
 .sticker-square .sticker-tip {
-  font-size: 5.5pt;
-  line-height: 1.25;
+  font-size: 6.5pt;
+}
+
+.sticker-square6 .sticker-tip {
+  font-size: 8pt;
 }
 
 /* 长方形 100mm × 50mm：二维码在左，文字在右 */
@@ -969,8 +1003,9 @@ textarea:focus {
 }
 
 .sticker-rect .sticker-qr {
-  width: 44mm;
-  height: 44mm;
+  /* 贴纸高 50mm，去掉 2mm 内边距和边框后可用高度约 45.2mm —— 码就顶到这个上限 */
+  width: 45mm;
+  height: 45mm;
   flex: 0 0 auto;
   margin: 0;
 }
