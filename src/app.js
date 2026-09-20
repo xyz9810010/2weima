@@ -92,12 +92,10 @@ function createApp(options) {
   // 只在适配层给不出 origin 时兜底，正常情况下以请求本身的协议为准
   const httpsFallback = Boolean(options.isHttps);
 
-  // 二维码内容只取决于「域名 + 编号」，所以它本身就是完美的缓存键。
-  // 多辆车的后台页面不必每次重算矩阵（对 Worker 的 CPU 限额也友好）。
+  // 二维码内容就是缓存键；后台一页好几张二维码时不必重复算矩阵（对 Worker 的 CPU 也友好）
   const qrCache = new Map();
 
-  function qrSvgFor(car, base) {
-    const content = `${base}/c/${car.id}`;
+  function qrSvgForContent(content) {
     let svg = qrCache.get(content);
     if (!svg) {
       svg = qr.toSvg(content, { scale: 8, quiet: 3 });
@@ -106,6 +104,15 @@ function createApp(options) {
     }
     return svg;
   }
+
+  /** 每辆车自己的码 */
+  const carUrl = (car, base) => `${base}/c/${car.id}`;
+  /**
+   * 通用码：域名根路径，不带任何编号。
+   * 因为 QR 只是一个网址，同一个码无法区分是哪辆车 —— 扫码页再让扫码人选。
+   * 好处是贴纸只有一种设计，印多少都一样；短 URL 也让二维码更小更好印。
+   */
+  const universalUrl = (base) => `${base}/`;
 
   const baseUrlOf = (req) => publicBaseUrl || req.origin;
 
@@ -169,6 +176,44 @@ function createApp(options) {
       return pageResponse(403, '该挪车码已停用', '车主已关闭这个挪车码，暂时无法通过它联系车主。');
     }
     return htmlResponse(200, views.scanPage(car, { dialNumber: dialNumberOf(car) }));
+  }
+
+  /**
+   * 通用码（域名根路径）。
+   *
+   * 同一个二维码贴在所有车上，所以这里必须回答「扫的是哪辆车」：
+   *   - 只启用了一辆 → 直接进那辆车，扫码人无感
+   *   - 启用多辆     → 列出车牌让扫码人点（人就站在车前，照着车牌点一下）
+   * 界面上的措辞刻意保持中性，不暴露"车主有几辆车"以外的信息。
+   */
+  async function handleUniversalScan(req) {
+    const cars = (await store.listCars()).filter((car) => car.enabled);
+
+    if (cars.length === 0) {
+      return pageResponse(
+        404,
+        '暂时无法联系车主',
+        '车主还没有启用挪车码，或者所有车辆都已停用。'
+      );
+    }
+    if (cars.length === 1) {
+      return htmlResponse(
+        200,
+        views.scanPage(cars[0], { dialNumber: dialNumberOf(cars[0]) })
+      );
+    }
+    return htmlResponse(
+      200,
+      views.pickCarPage(
+        cars.map((car) => ({
+          id: car.id,
+          plate: car.plate || '未填写车牌',
+          owner_name: car.owner_name || '',
+          // 列表里不显示号码，点进去才有
+          hasNumber: Boolean(dialNumberOf(car)),
+        }))
+      )
+    );
   }
 
   /**
@@ -260,9 +305,11 @@ function createApp(options) {
     const base = baseUrlOf(req);
     const cars = (await store.listCars()).map((car) => {
       const item = Object.assign({}, car);
-      item.qrSvg = qrSvgFor(car, base);
+      item.qrSvg = qrSvgForContent(carUrl(car, base));
+      item.scanUrl = carUrl(car, base);
       return item;
     });
+    const enabledCars = cars.filter((car) => car.enabled);
     const noticeKey = url.searchParams.get('notice');
     return htmlResponse(
       200,
@@ -270,6 +317,13 @@ function createApp(options) {
         cars,
         messages: await store.listMessages(100),
         baseUrl: base,
+        // 通用码的说明随启用数量变化：一辆时扫码直达，多辆时扫码人要选
+        universal: {
+          url: universalUrl(base),
+          qrSvg: qrSvgForContent(universalUrl(base)),
+          enabledCount: enabledCars.length,
+          plates: enabledCars.map((car) => car.plate || '未填写车牌'),
+        },
         unread: await store.countUnread(),
         notice: noticeKey && NOTICES[noticeKey] ? NOTICES[noticeKey] : null,
       })
@@ -322,6 +376,52 @@ function createApp(options) {
     return redirectResponse('/admin?notice=deleted');
   }
 
+  /** 通用二维码本身的 SVG（后台顶部那张） */
+  async function handleUniversalQrSvg(req, url) {
+    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
+    const disposition = url.searchParams.get('download') === '1' ? 'attachment' : 'inline';
+    return response(
+      200,
+      Object.assign(
+        {
+          'Content-Type': 'image/svg+xml; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'Content-Disposition': `${disposition}; filename="chezai-universal.svg"`,
+        },
+        SECURITY_HEADERS
+      ),
+      qrSvgForContent(universalUrl(baseUrlOf(req)))
+    );
+  }
+
+  /** 通用贴纸的打印页：一种设计，贴在任一车上 */
+  async function handleUniversalPrint(req) {
+    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
+    const base = baseUrlOf(req);
+    return htmlResponse(
+      200,
+      views.printPage(
+        { id: '', plate: '', placeholder: true },
+        { baseUrl: base, qrSvg: qrSvgForContent(universalUrl(base)), universal: true }
+      )
+    );
+  }
+
+  /** 批量打印：每辆车一张贴纸，排在一页里一次打完 */
+  async function handlePrintAll(req) {
+    if (!(await isAuthed(req))) return redirectResponse('/admin/login');
+    const base = baseUrlOf(req);
+    const cars = (await store.listCars())
+      .filter((car) => car.enabled)
+      .map((car) => ({
+        id: car.id,
+        plate: car.plate || '未填写车牌',
+        qrSvg: qrSvgForContent(carUrl(car, base)),
+        scanUrl: carUrl(car, base),
+      }));
+    return htmlResponse(200, views.printAllPage({ cars, baseUrl: base }));
+  }
+
   async function handleQrSvg(req, url, params) {
     if (!(await isAuthed(req))) return redirectResponse('/admin/login');
     const car = await store.getCar(params[0]);
@@ -338,7 +438,7 @@ function createApp(options) {
         },
         SECURITY_HEADERS
       ),
-      qrSvgFor(car, baseUrlOf(req))
+      qrSvgForContent(carUrl(car, baseUrlOf(req)))
     );
   }
 
@@ -347,7 +447,10 @@ function createApp(options) {
     const car = await store.getCar(params[0]);
     if (!car) return pageResponse(404, '车辆不存在', '它可能已经被删除了。');
     const base = baseUrlOf(req);
-    return htmlResponse(200, views.printPage(car, { baseUrl: base, qrSvg: qrSvgFor(car, base) }));
+    return htmlResponse(
+      200,
+      views.printPage(car, { baseUrl: base, qrSvg: qrSvgForContent(carUrl(car, base)) })
+    );
   }
 
   async function handleMarkRead(req, url, params) {
@@ -368,11 +471,8 @@ function createApp(options) {
 
   const routes = [
     ['GET', /^\/healthz$/, async () => jsonResponse(200, { ok: true })],
-    [
-      'GET',
-      /^\/$/,
-      async (req) => redirectResponse((await isAuthed(req)) ? '/admin' : '/admin/login'),
-    ],
+    // 根路径就是「通用码」：一张贴纸贴所有车，扫码后由页面决定是哪辆
+    ['GET', /^\/$/, handleUniversalScan],
     ['GET', new RegExp(`^/c/${ID}$`), handleScan],
     ['POST', new RegExp(`^/c/${ID}/call$`), handlePostCall],
 
@@ -380,6 +480,9 @@ function createApp(options) {
     ['POST', /^\/admin\/login$/, handleLoginSubmit],
     ['POST', /^\/admin\/logout$/, handleLogout],
     ['GET', /^\/admin$/, handleAdminHome],
+    ['GET', /^\/admin\/universal\.svg$/, handleUniversalQrSvg],
+    ['GET', /^\/admin\/print-universal$/, handleUniversalPrint],
+    ['GET', /^\/admin\/print-all$/, handlePrintAll],
     ['POST', /^\/admin\/cars$/, handleCreateCar],
     ['POST', new RegExp(`^/admin/cars/${ID}$`), handleUpdateCar],
     ['POST', new RegExp(`^/admin/cars/${ID}/delete$`), handleDeleteCar],

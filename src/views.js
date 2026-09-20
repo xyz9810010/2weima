@@ -64,6 +64,41 @@ function scanPage(car, { dialNumber }) {
   });
 }
 
+/**
+ * 通用码在「启用了多辆车」时的落地页：让扫码人指认是哪辆车。
+ * 人就站在车前面，照着车牌点一下即可；页面不展示任何号码。
+ */
+function pickCarPage(cars) {
+  const items = cars
+    .map(
+      (car) => `<a class="pick-item" href="/c/${esc(car.id)}">
+      <span class="pick-plate">${esc(car.plate)}</span>
+      ${car.owner_name ? `<span class="pick-owner">${esc(car.owner_name)} 的车</span>` : ''}
+      ${car.hasNumber ? '' : '<span class="pick-warn">暂未留电话</span>'}
+    </a>`
+    )
+    .join('\n');
+
+  return layout({
+    title: '请选择挡路的车辆',
+    body: `<main class="wrap wrap-scan">
+  <div class="hero">
+    <div class="hero-title">请选择挡路的车辆</div>
+    <div class="hero-sub">点一下车牌，就能直接拨给车主</div>
+  </div>
+
+  <section class="card">
+    <div class="pick-list">${items}</div>
+  </section>
+
+  <p class="foot-note">
+    这些车辆都由同一位车主登记。<br>
+    请勿拨打骚扰或广告电话。
+  </p>
+</main>`,
+  });
+}
+
 function messagePage({ title, text, bodyHtml = '' }) {
   return layout({
     title,
@@ -209,7 +244,7 @@ function callRow(record) {
 </li>`;
 }
 
-function adminPage({ cars, messages, baseUrl, unread, notice }) {
+function adminPage({ cars, messages, baseUrl, universal, unread, notice }) {
   const carSection = cars.length
     ? cars.map((car) => carCard(car, { baseUrl, qrSvg: car.qrSvg })).join('\n')
     : '<p class="muted">还没有车辆，先在上面添加一辆。</p>';
@@ -217,6 +252,15 @@ function adminPage({ cars, messages, baseUrl, unread, notice }) {
   const recordSection = messages.length
     ? `<ul class="msg-list">${messages.map(callRow).join('\n')}</ul>`
     : '<p class="muted">还没有人拨号。</p>';
+
+  // 通用码的说明随「启用了几辆车」而变，避免用户以为一个码能自动认出车
+  const universalHint =
+    universal.enabledCount === 0
+      ? '你现在没有启用中的车辆，这个码扫开会提示「暂时无法联系车主」。'
+      : universal.enabledCount === 1
+        ? `现在只启用了 1 辆车（${esc(universal.plates[0])}），扫码会直接进那一辆，扫码人不用做任何选择。`
+        : `你现在启用了 ${universal.enabledCount} 辆车（${universal.plates.map(esc).join('、')}）。
+           二维码本身分不出是哪辆，所以扫码页会先列出这些车牌，让扫码人点一下「是这辆」。`;
 
   return layout({
     title: '车主后台',
@@ -233,22 +277,44 @@ function adminPage({ cars, messages, baseUrl, unread, notice }) {
   ${notice ? banner(notice.text, notice.kind) : ''}
 
   <section class="card">
-    <h2 class="card-title">接入地址</h2>
-    <p class="muted">二维码指向：<code>${esc(baseUrl)}/c/&lt;编号&gt;</code></p>
-    <p class="hint">
-      上线前请把 <code>PUBLIC_BASE_URL</code> 设成你的固定域名（并配上 HTTPS）。
-      若用请求里的 Host 临时生成，换域名后已打印的贴纸会失效。
-    </p>
-  </section>
-
-  <section class="card">
     <h2 class="card-title">新增车辆</h2>
     ${carForm(null, '/admin/cars', '生成挪车码')}
   </section>
 
   <section class="card">
-    <h2 class="card-title">车辆与贴纸（${cars.length}）</h2>
+    <div class="card-head">
+      <h2 class="card-title">车辆与贴纸（${cars.length}）</h2>
+      ${cars.length ? '<a class="btn btn-sm btn-primary" href="/admin/print-all" target="_blank" rel="noreferrer">批量打印全部贴纸</a>' : ''}
+    </div>
+    <p class="hint">
+      <b>一车一码</b>：每辆车有自己的码，扫码直接进那一辆，扫码人不用选。
+      点上面的按钮可以把所有车的贴纸排在一页里一次打完，每张贴纸都印着车牌，不会贴错。
+      改车牌、改号码都不用重新打印。
+    </p>
     <div class="car-list">${carSection}</div>
+  </section>
+
+  <section class="card card-universal">
+    <div class="card-head">
+      <h2 class="card-title">通用二维码（备用）</h2>
+      <span class="badge badge-call">一张贴纸贴所有车</span>
+    </div>
+    <div class="car-body">
+      <div class="qr-box">${universal.qrSvg}</div>
+      <div class="car-actions">
+        <p class="scan-url">${esc(universal.url)}</p>
+        <div class="btn-row">
+          <a class="btn btn-sm btn-ghost" href="/admin/print-universal" target="_blank" rel="noreferrer">打印通用贴纸</a>
+          <a class="btn btn-sm btn-ghost" href="/admin/universal.svg?download=1">下载 SVG</a>
+          <a class="btn btn-sm btn-ghost" href="/" target="_blank" rel="noreferrer">预览</a>
+        </div>
+        <p class="hint">${universalHint}</p>
+        <p class="hint">
+          它的好处是「先印一批一样的备用」；代价是扫码时分不出是哪辆车。
+          想让扫码结果直接对上车辆，请用上面每辆车自己的一车一码。
+        </p>
+      </div>
+    </div>
   </section>
 
   <section class="card">
@@ -267,7 +333,20 @@ function adminPage({ cars, messages, baseUrl, unread, notice }) {
 /* 打印贴纸                                                            */
 /* ------------------------------------------------------------------ */
 
-function printPage(car, { baseUrl, qrSvg }) {
+function sticker(car, { baseUrl, qrSvg, universal = false }) {
+  const plate = car.plate || '临时停车';
+  return `<div class="sticker">
+  <div class="sticker-head">
+    <div class="sticker-title">扫码挪车</div>
+    <div class="sticker-sub">临时停靠 · 请多包涵</div>
+  </div>
+  <div class="sticker-qr">${qrSvg}</div>
+  ${universal ? '' : `<div class="sticker-plate">${esc(plate)}</div>`}
+  <div class="sticker-tip">车辆挡路请扫码联系车主</div>
+</div>`;
+}
+
+function printPage(car, { baseUrl, qrSvg, universal = false }) {
   const plate = car.plate || '临时停车';
   return layout({
     title: `挪车贴纸 · ${plate}`,
@@ -278,24 +357,50 @@ function printPage(car, { baseUrl, qrSvg }) {
   <span class="hint">建议用 A6 或更小尺寸、不干胶纸打印，贴在挡风玻璃内侧右上角。</span>
 </div>
 
-<div class="sticker">
-  <div class="sticker-head">
-    <div class="sticker-title">扫码挪车</div>
-    <div class="sticker-sub">临时停靠 · 请多包涵</div>
-  </div>
-  <div class="sticker-qr">${qrSvg}</div>
-  <div class="sticker-plate">${esc(plate)}</div>
-  <div class="sticker-tip">车辆挡路请扫码联系车主</div>
-  <div class="sticker-code">编号 ${esc(car.id)}</div>
-  <div class="sticker-url">${esc(baseUrl)}/c/${esc(car.id)}</div>
-</div>`,
+${sticker(car, { baseUrl, qrSvg, universal })}
+
+<p class="print-note">
+  ${
+    universal
+      ? '这是通用贴纸：一张可以贴在任意一辆车上。扫码后如果车主启用了多辆车，扫码人需要先点一下车牌。'
+      : `二维码内容：${esc(baseUrl)}/c/${esc(car.id)}`
+  }
+</p>`,
+  });
+}
+
+/** 批量打印：把启用中的每辆车各出一张贴纸，排在一页里一次打完 */
+function printAllPage({ cars, baseUrl }) {
+  const sheet = cars.length
+    ? cars
+        .map(
+          (car) => `<div class="sticker-cell">
+        ${sticker(car, { baseUrl, qrSvg: car.qrSvg })}
+        <div class="sticker-url">${esc(car.scanUrl)}</div>
+      </div>`
+        )
+        .join('\n')
+    : '<p class="muted">没有启用中的车辆。</p>';
+
+  return layout({
+    title: '批量打印挪车贴纸',
+    bodyClass: 'print-body',
+    body: `<div class="print-toolbar">
+  <a class="btn btn-sm btn-ghost" href="/admin">返回后台</a>
+  <button class="btn btn-sm btn-primary" type="button" data-print>打印 / 另存为 PDF</button>
+  <span class="hint">每辆车一张，共 ${cars.length} 张。裁剪后贴到对应车辆上，车牌已印在贴纸上。</span>
+</div>
+
+<div class="sticker-sheet">${sheet}</div>`,
   });
 }
 
 module.exports = {
   scanPage,
+  pickCarPage,
   messagePage,
   loginPage,
   adminPage,
   printPage,
+  printAllPage,
 };

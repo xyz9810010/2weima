@@ -699,12 +699,103 @@ textarea:focus {
   word-break: break-all;
 }
 
+/* 批量打印：每辆车一张，自动排成网格 */
+
+.sticker-sheet {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6mm;
+  max-width: 210mm;
+  margin: 0 auto;
+  padding: 0 8mm 20mm;
+}
+
+.sticker-cell {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.sticker-cell .sticker {
+  margin: 0;
+}
+
+.sticker-cell .sticker-url {
+  text-align: center;
+  margin-top: 1mm;
+}
+
+.print-note {
+  max-width: 105mm;
+  margin: 0 auto 30px;
+  font-size: 9pt;
+  color: #666;
+  text-align: center;
+  word-break: break-all;
+}
+
+/* 通用码在启用多辆车时的「选车牌」页 */
+
+.pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pick-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid #e2e6ee;
+  border-radius: 12px;
+  background: #fff;
+  text-decoration: none;
+  color: inherit;
+}
+
+.pick-item:hover {
+  border-color: #b9c6de;
+  background: #f7f9fc;
+}
+
+.pick-plate {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.pick-owner {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.pick-warn {
+  margin-left: auto;
+  font-size: 12px;
+  color: #b45309;
+}
+
+.hero-sub {
+  font-size: 13px;
+  color: #4b5563;
+  margin-top: 6px;
+}
+
+/* 后台顶部的通用码卡片稍微强调一下 */
+
+.card-universal {
+  border: 1px solid #c7d7f5;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
+}
+
 @media print {
   body {
     background: #fff;
   }
 
-  .print-toolbar {
+  .print-toolbar,
+  .print-note {
     display: none;
   }
 
@@ -713,6 +804,18 @@ textarea:focus {
     border-width: 1px;
     box-shadow: none;
     page-break-inside: avoid;
+  }
+
+  .sticker-sheet {
+    display: block;
+    max-width: none;
+    padding: 0;
+  }
+
+  .sticker-cell {
+    display: inline-block;
+    vertical-align: top;
+    margin: 0 4mm 4mm 0;
   }
 
   @page {

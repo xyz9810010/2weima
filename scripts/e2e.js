@@ -122,7 +122,13 @@ async function waitForReady() {
 async function run() {
   section('1. 基础与鉴权');
   check('GET /healthz = 200', (await get('/healthz')).status === 200);
-  check('未登录访问 / 跳登录页', (await get('/')).location === '/admin/login');
+
+  // 根路径现在是「通用码」的落地页（扫码方），不再是后台入口
+  {
+    const root = await get('/');
+    check('根路径是扫码方页面，不再跳后台', root.location === '', root.location);
+    check('还没建车时根路径给出人话提示', root.status === 404 && root.text.includes('暂时无法联系车主'), root.status);
+  }
   check('未登录访问 /admin 跳登录页', (await get('/admin')).location === '/admin/login');
 
   const loginPage = await get('/admin/login');
@@ -276,7 +282,68 @@ async function run() {
   check('删除车辆 = 302 notice=deleted', deleted.location.includes('notice=deleted'), deleted.location);
   check('删除后扫码 = 404', (await get(`/c/${code}`)).status === 404);
 
-  section('7. 会话与越权');
+  section('7. 通用码（一张贴纸贴所有车）');
+  {
+    const base = BASE;
+    const { toSvg } = require('../src/qr.js');
+
+    // 上一节把车都删光了，正好先测「什么都没有」的情况
+    check('一辆车都没有时根路径给出提示', (await get('/')).status === 404);
+
+    const adminRow = await get('/admin');
+    check('后台顶部展示通用二维码', adminRow.text.includes('通用二维码'));
+    check('后台写明通用码地址是根路径', adminRow.text.includes(`${base}/`));
+
+    const uniSvg = await get('/admin/universal.svg');
+    check('通用码 SVG = 200', uniSvg.status === 200 && uniSvg.text.startsWith('<svg'), uniSvg.status);
+    // SVG 是确定性的，直接和「用根路径重新编码一次」的结果比对，
+    // 这样能证明通用码里装的确实是 域名/ 而不是某辆车的固定编号
+    check(
+      '【关键】通用码内容 = 域名根路径',
+      uniSvg.text === toSvg(`${base}/`, { scale: 8, quiet: 3 }),
+      '通用码内容不对'
+    );
+
+    const a = await post('/admin/cars', {
+      plate: '浙A·77777', owner_name: '车主甲', phone: '13800001111', call_number: '', note: '', enabled: 'on',
+    });
+    check('建第一辆启用中的车', a.location.includes('notice=created'), a.location);
+
+    const direct = await get('/');
+    check('只启用 1 辆车时，通用码直达该车', direct.status === 200 && direct.text.includes('浙A·77777'), direct.status);
+    check('直达时就有拨号按钮', direct.text.includes('href="tel:'));
+    check('直达时没有选车牌页', !direct.text.includes('请选择挡路的车辆'));
+
+    const b = await post('/admin/cars', {
+      plate: '苏D·12345', owner_name: '车主乙', phone: '13655556666', call_number: '', note: '', enabled: 'on',
+    });
+    check('建第二辆启用中的车', b.location.includes('notice=created'), b.location);
+
+    const picker = await get('/');
+    check('启用 2 辆车时，通用码显示选车牌页', picker.status === 200 && picker.text.includes('请选择挡路的车辆'), picker.status);
+    check('选车牌页列出两辆车牌', picker.text.includes('浙A·77777') && picker.text.includes('苏D·12345'));
+    check('选车牌页本身不给拨号链接（号码要点进去才出现）', !picker.text.includes('href="tel:'));
+    check('后台顶部会说明「多辆车时扫码人要先选」', (await get('/admin')).text.includes('扫码页会先列出这些车牌'));
+
+    const list5 = await get('/admin');
+    const codes = [...new Set((list5.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)))];
+    check('拿到两辆车编号', codes.length === 2, codes.join(','));
+    check('点进某一辆就能拨号', (await get(`/c/${codes[0]}`)).text.includes('href="tel:'));
+
+    const printAll = await get('/admin/print-all');
+    check('批量打印页 = 200', printAll.status === 200);
+    check('批量打印页正好两张贴纸', (printAll.text.match(/class="sticker"/g) || []).length === 2);
+    check('批量打印页每张都印了车牌', printAll.text.includes('浙A·77777') && printAll.text.includes('苏D·12345'));
+
+    const uniPrint = await get('/admin/print-universal');
+    check('通用贴纸打印页 = 200', uniPrint.status === 200 && uniPrint.text.includes('通用贴纸'));
+    check('通用贴纸不印任何车牌', !uniPrint.text.includes('浙A·77777') && !uniPrint.text.includes('苏D·12345'));
+
+    for (const c of codes) await post(`/admin/cars/${c}/delete`);
+    check('全部删掉后根路径又给出提示', (await get('/')).status === 404);
+  }
+
+  section('8. 会话与越权');
   check('登出 = 302', (await post('/admin/logout')).location === '/admin/login');
   check('登出后后台跳登录页', (await get('/admin')).location === '/admin/login');
   const anon = await post('/admin/cars', { plate: '伪造' }, { auth: false });
