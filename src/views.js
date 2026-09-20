@@ -482,11 +482,11 @@ function adminPage({ mode = 'admin', account = null, cars, messages, users = [],
 /**
  * 贴纸。
  *
- * 刻意**不印车牌**：车牌和号码都是扫码那一刻从数据库现查的，
- * 印在贴纸上只会变成过期信息 —— 贴纸挪到别的车上、或者车换了牌照，
- * 印上去的旧车牌就和扫码页对不上了。
- * 印一个小号「编号」是给自己看的：它等于后台那条记录的编号，永久不变，
- * 换车换号码都还是它，便于把贴纸和后台记录对上号。
+ * 刻意**不印车牌、也不印编号**：
+ *   - 车牌和号码都是扫码那一刻从数据库现查的，印上去只会变成过期信息
+ *   - 编号是内部标识，贴在玻璃上对扫码人没有意义，没必要露出来
+ * 所以贴纸只保留「让人扫码」这件事本身，外观上完全通用，
+ * 换车、换牌、换号码都不用重印。哪张贴纸对应哪辆车，由后台的编号来对应。
  */
 function sticker(car, { qrSvg, universal = false }) {
   return `<div class="sticker">
@@ -496,13 +496,13 @@ function sticker(car, { qrSvg, universal = false }) {
   </div>
   <div class="sticker-qr">${qrSvg}</div>
   <div class="sticker-tip">车辆挡路请扫码联系车主</div>
-  <div class="sticker-code">${universal ? '通用贴纸 · 可贴任意车辆' : `编号 ${esc(car.id)}`}</div>
+  ${universal ? '<div class="sticker-code">通用贴纸 · 可贴任意车辆</div>' : ''}
 </div>`;
 }
 
 function printPage(car, { baseUrl, qrSvg, universal = false }) {
   return layout({
-    title: universal ? '挪车贴纸 · 通用' : `挪车贴纸 · ${car.plate || '未填写车牌'}`,
+    title: universal ? '挪车贴纸 · 通用' : '挪车贴纸',
     bodyClass: 'print-body',
     body: `<div class="print-toolbar">
   <a class="btn btn-sm btn-ghost" href="/admin">返回后台</a>
@@ -516,8 +516,8 @@ ${sticker(car, { qrSvg, universal })}
   ${
     universal
       ? '这是通用贴纸：一张可以贴在任意一辆车上。扫码后如果车主启用了多辆车，扫码人需要先点一下车牌。'
-      : `贴纸上的码永久不变，所以车牌、号码随时能改，换到别的车上也不用重印。<br>
-         它指向后台里编号为 ${esc(car.id)} 的那条记录 —— 改那条记录就等于改这张贴纸。<br>
+      : `贴纸外观是通用的（不印车牌、不印编号），但每张的码都指向后台里的一条记录。<br>
+         改车牌、改号码、换到别的车上，都只改那条记录，贴纸不用重印。<br>
          二维码内容：${esc(baseUrl)}/c/${esc(car.id)}`
   }
 </p>`,
@@ -531,7 +531,7 @@ function printAllPage({ cars, baseUrl }) {
         .map(
           (car) => `<div class="sticker-cell">
         ${sticker(car, { qrSvg: car.qrSvg })}
-        <div class="sticker-url">${esc(car.plate || '未填写车牌')} · ${esc(car.id)}</div>
+        <div class="sticker-url">${esc(car.plate || '未填写车牌')}</div>
       </div>`
         )
         .join('\n')
@@ -543,7 +543,10 @@ function printAllPage({ cars, baseUrl }) {
     body: `<div class="print-toolbar">
   <a class="btn btn-sm btn-ghost" href="/admin">返回后台</a>
   <button class="btn btn-sm btn-primary" type="button" data-print>打印 / 另存为 PDF</button>
-  <span class="hint">每辆车一张，共 ${cars.length} 张。虚线下面那行是「车牌 · 编号」，裁剪后丢掉即可，别印到贴纸上。</span>
+  <span class="hint">
+    每辆车一张，共 ${cars.length} 张。虚线框外那行车牌只是给你对号用的，裁剪时剪掉。
+    贴纸本身外观完全一样，所以贴之前请对照这行车牌，别贴错车。
+  </span>
 </div>
 
 <div class="sticker-sheet">${sheet}</div>`,

@@ -250,11 +250,11 @@ async function run() {
   check('下载模式带 attachment', (dl.headers.get('content-disposition') || '').includes('attachment'));
   check('打印页 = 200', (await get(`/admin/cars/${code}/print`)).status === 200);
   {
-    // 贴纸必须能随便挪到别的车上，所以本体上不能出现会过期的车牌
+    // 贴纸必须能随便挪到别的车上，所以本体上不能出现会过期的车牌，也不该露出内部编号
     const one = (await get(`/admin/cars/${code}/print`)).text;
     const body = (one.split('<div class="sticker">')[1] || '').split('<p class="print-note">')[0];
     check('单张贴纸本体不印车牌（换车也不用重印）', !body.includes('沪A·88888'), body.slice(0, 200));
-    check('单张贴纸印的是永久编号', body.includes(`编号 ${code}`));
+    check('单张贴纸本体不印编号', !body.includes(code), '编号露在贴纸上了');
   }
   check('静态 /style.css = 200', (await get('/style.css')).status === 200);
   check('静态 /app.js = 200', (await get('/app.js')).status === 200);
@@ -411,22 +411,24 @@ async function run() {
     check('批量打印页 = 200', printAll.status === 200);
     check('批量打印页正好两张贴纸', (printAll.text.match(/class="sticker"/g) || []).length === 2);
     {
-      // 只取贴纸本体：切到下面那行「车牌 · 编号」小字之前
+      // 只取贴纸本体：切到下面那行对号用的车牌小字之前
       const chunks = printAll.text
         .split('<div class="sticker">')
         .slice(1)
         .map((c) => c.split('<div class="sticker-url">')[0]);
       check(
-        '【关键】贴纸本体不印车牌，可随时挪到别的车上',
-        chunks.length === 2 && chunks.every((c) => !c.includes('浙A·77777') && !c.includes('苏D·12345')),
+        '【关键】贴纸本体不印车牌、不印编号，可随时挪到别的车上',
+        chunks.length === 2 &&
+          chunks.every((c) => !c.includes('浙A·77777') && !c.includes('苏D·12345') && !/编号|tz3n|编号 /.test(c)),
         chunks[0] ? chunks[0].slice(0, 200) : 'no sticker'
       );
-      check('每张贴纸都印了自己的永久编号', chunks.every((c) => c.includes('编号 ')));
+      check('贴纸本体只有「扫码挪车」这一件事', chunks.every((c) => c.includes('扫码挪车')));
     }
     check(
-      '贴纸下方另有「车牌 · 编号」小字，裁剪前好对号',
-      printAll.text.includes('浙A·77777 · ') && printAll.text.includes('苏D·12345 · ')
+      '贴纸框外另有一行车牌，纯粹用来对号',
+      printAll.text.includes('浙A·77777') && printAll.text.includes('苏D·12345')
     );
+    check('批量打印页不出现任何编号', !/编号/.test(printAll.text.split('<div class="sticker-sheet">')[0]), '标题区出现了编号');
 
     const uniPrint = await get('/admin/print-universal');
     check('通用贴纸打印页 = 200', uniPrint.status === 200 && uniPrint.text.includes('通用贴纸'));
