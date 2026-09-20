@@ -41,11 +41,13 @@ const NOTICES = {
   created: { text: '已生成挪车码，下面可以直接下载或打印贴纸。', kind: 'info' },
   updated: { text: '已保存修改。', kind: 'info' },
   deleted: { text: '已删除该车辆及其拨号记录。', kind: 'info' },
+  read: { text: '已标记为已读。', kind: 'info' },
+  readAll: { text: '已全部标记为已读。', kind: 'info' },
+  cleaned: { text: '已清理掉空白车辆。', kind: 'info' },
   needinfo: {
     text: '没建成：至少要填「车牌」或一个号码。一条什么都不填的记录，贴纸扫开什么也做不了。',
     kind: 'error',
   },
-  cleaned: { text: '已清理掉空白车辆。', kind: 'info' },
 };
 
 /** 一条车辆记录有没有意义：车牌、真实号、拨号码总得有一个 */
@@ -577,10 +579,13 @@ function createApp(options) {
     }
 
     const data = await loadDashboard(session, req);
-    const notice = NOTICES[noticeKey];
+    const notice = NOTICES[noticeKey] || null;
 
     return jsonResponse(200, {
       ok: true,
+      // 前端拿它弹底部轻提示 —— 用户可能正滚在页面下方改东西，
+      // 光在顶部更新提示区他根本看不到
+      notice: notice ? { text: notice.text, kind: notice.kind } : null,
       html: {
         'notice-area': notice ? views.bannerHtml(notice.text, notice.kind) : '',
         'car-count': `车辆与贴纸（${data.cars.length}）`,
@@ -808,7 +813,7 @@ function createApp(options) {
     const session = await currentSession(req);
     if (!session) return redirectResponse('/login');
     await store.markAllRead(session.kind === 'user' ? session.userId : null);
-    return afterChange(session, req, url, 'read');
+    return afterChange(session, req, url, 'readAll');
   }
 
   /* ----------------------------- 路由表 ---------------------------- */

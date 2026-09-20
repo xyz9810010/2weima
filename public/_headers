@@ -1,0 +1,11 @@
+# 静态资源的缓存策略（Cloudflare Workers 静态资源支持 _headers）
+#
+# 这两个文件是页面的样式与脚本，改完必须立刻生效：
+# 否则用户浏览器里还跑着旧的那份，会出现「明明改好了，点了却没反应」。
+# no-cache 不是不缓存，而是每次回源校验（命中就用 304），代价很小。
+
+/app.js
+  Cache-Control: no-cache
+
+/style.css
+  Cache-Control: no-cache

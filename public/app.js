@@ -87,6 +87,33 @@
     }
   }
 
+  // 7) 轻提示：固定在屏幕底部，不管滚到哪里都看得到。
+  //    role=status + aria-live 让读屏也会念出来，不是只有视觉反馈。
+  function toast(text, kind) {
+    if (!text) return;
+    var host = document.getElementById('toast-host');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'toast-host';
+      host.className = 'toast-host';
+      host.setAttribute('role', 'status');
+      host.setAttribute('aria-live', 'polite');
+      document.body.appendChild(host);
+    }
+
+    var el = document.createElement('div');
+    el.className = 'toast' + (kind === 'error' ? ' toast-error' : '');
+    el.textContent = text;
+    host.appendChild(el);
+
+    setTimeout(function () {
+      el.classList.add('toast-out');
+      setTimeout(function () {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }, 320);
+    }, 2400);
+  }
+
   function setPending(form, pending) {
     var buttons = form.querySelectorAll('button[type="submit"]');
     for (var i = 0; i < buttons.length; i++) {
@@ -148,10 +175,16 @@
               payload.notice +
               '</div>';
           }
+          toast(payload.notice, payload.kind === 'error' ? 'error' : 'info');
           return;
         }
 
         applyFragments(payload);
+
+        // 底部轻提示：改完立刻知道成没成，不用滚回顶部找那行提示
+        if (payload.notice && payload.notice.text) {
+          toast(payload.notice.text, payload.notice.kind);
+        }
 
         var newCarForm = form.hasAttribute('data-car-id') ? null : form;
         if (newCarForm && payload.resetNewCar) {

@@ -703,6 +703,9 @@ async function run() {
 
     const adminRow = await get('/admin');
     check('后台不再用 emoji 当警告图标', !adminRow.text.includes('⚠'), '还有 ⚠️');
+    check('脚本里有底部轻提示实现', (await get('/app.js')).text.includes('toast-host'));
+    check('样式里有轻提示的定位', css.includes('.toast-host'));
+    check('静态资源不做长缓存（改完立刻生效）', (await get('/style.css')).headers.get('cache-control') === 'no-cache', (await get('/style.css')).headers.get('cache-control'));
   }
 
   section('14. 局部刷新（改动不整页重载）');
@@ -731,6 +734,8 @@ async function run() {
     check('片段里带上新车', payload && payload.html['car-list'].includes('闽D·6Y7U8'));
     check('片段里更新了车辆数', payload && payload.html['car-count'].includes('车辆与贴纸'), payload && payload.html['car-count']);
     check('新建后要求前端重置表单', payload && payload.resetNewCar === true);
+    // 底部轻提示靠这个字段：用户可能正滚在页面下方，顶部提示他看不到
+    check('带回可弹提示的文案', payload && payload.notice && payload.notice.text.includes('已生成'), payload && JSON.stringify(payload.notice));
 
     const code = payload ? (payload.html['car-list'].match(/\/c\/([A-Za-z0-9_-]{10})/g) || [])
       .map((s) => s.slice(3))
@@ -743,6 +748,7 @@ async function run() {
         owner_name: '', phone: '', call_number: '13900139000', note: '改过了', enabled: 'on',
       }, ajax));
       check('AJAX 保存返回新片段', updated && updated.html['car-list'].includes('13900139000'));
+      check('保存也带回「已保存」提示', updated && updated.notice && updated.notice.text.includes('已保存'), updated && JSON.stringify(updated.notice));
 
       const bad = await request('POST', `/cars/${code}`, {
         plate_province: '', plate_city: '', plate_rest: '', plate: '', owner_name: '', phone: '', call_number: '', note: '', enabled: 'on',

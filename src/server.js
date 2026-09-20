@@ -68,7 +68,8 @@ function serveStatic(res, pathname) {
 
   res.writeHead(200, {
     'Content-Type': entry.type,
-    'Cache-Control': 'public, max-age=300',
+    // 每次让浏览器回来校验一下：否则改完样式/脚本，用户还在跑旧的那份
+    'Cache-Control': 'no-cache',
     'X-Content-Type-Options': 'nosniff',
   });
   res.end(content);
