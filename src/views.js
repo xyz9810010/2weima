@@ -483,7 +483,7 @@ function adminPage({
 
   const userSection = !isAdmin
     ? ''
-    : `<section class="card">
+    : `<section class="card card-users">
     <div class="card-head">
       <h2 class="card-title" id="user-count">车主账号（${users.length}）</h2>
     </div>
@@ -545,20 +545,20 @@ function adminPage({
       在车主账号里看不到；通用码也只认这些车。</p>
     <p class="hint">车主各自注册账号后，在「我的车辆」里自己建车、自己打印贴纸。</p>
   </section>`
-      : `<section class="card">
+      : `<section class="card card-account">
     <h2 class="card-title">我的账号</h2>
     <p class="muted">${esc((account && account.contact) || '')}${account && account.name ? ` · ${esc(account.name)}` : ''}</p>
     <p class="hint">你只能看到和管理自己的车。</p>
   </section>`
   }
 
-  <section class="card">
+  <section class="card card-newcar">
     <h2 class="card-title">新增车辆</h2>
     ${carForm(null, '/cars', '生成挪车码', { remote: true })}
     <p class="hint">至少要填「车牌」或一个号码 —— 什么都不填的记录建了也没用，会被拦下来。</p>
   </section>
 
-  <section class="card">
+  <section class="card card-cars">
     <div class="card-head">
       <h2 class="card-title" id="car-count">车辆与贴纸（${cars.length}）</h2>
       <div id="car-actions">
@@ -577,7 +577,7 @@ function adminPage({
 
   ${universalSection}
 
-  <section class="card">
+  <section class="card card-records">
     <div class="card-head">
       <h2 class="card-title">拨号记录</h2>
       <div id="record-actions">${recordActionsHtml(unread)}</div>

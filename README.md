@@ -439,6 +439,16 @@ CREATE TABLE messages (          -- 表名是历史遗留，现在一行 = 一�
   **调高不影响已注册的账号**，老哈希仍按各自的次数校验
 - **平台后台只有一个密码**，没有二次验证。它是最高权限（能看到所有车主），
   泄露的后果比单个车主账号严重，建议用长随机串并定期更换
+- **`cloudflareinsights.com` 的脚本会被 CSP 拦掉**：Cloudflare 对放在它上面的域名
+  默认开启 Web Analytics，会往 HTML 里注入 `beacon.min.js`；而本站 CSP 是
+  `default-src 'none'`，所以它会加载失败并在控制台留一条报错。
+  想彻底消掉：Cloudflare 面板 → 该域名 → 概览/分析 → 关闭 Web Analytics。
+  想让它工作（会统计扫码页访问，与「不采集扫码人信息」的承诺有冲突）：
+  在 `src/app.js` 的 `SECURITY_HEADERS` 里把 `script-src` 加上
+  `https://static.cloudflareinsights.com`，`connect-src` 加上 `https://cloudflareinsights.com`。
+- **移动端约定**：断点按内容取 640 / 1024；手机上小按钮自动提到 44px；
+  顶部栏和容器让开 `env(safe-area-inset-*)`（`viewport-fit=cover` 会让内容顶到刘海下）；
+  手机上先显示「车辆与贴纸」再显示「新增车辆」那个长表单（`body.admin .wrap` 的 `order`）。
 - **单租户**。一个部署 = 一个车主后台。要做成 SaaS 多租户得再加账号体系与行级隔离
 
 ## 八、待办

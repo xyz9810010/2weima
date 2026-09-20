@@ -1190,6 +1190,110 @@ textarea:focus {
   box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
 }
 
+/* ---------------------- 移动端（手机优先那部分） ---------------------- */
+
+/*
+ * 断点约定（对齐 ui-ux-pro-max 的建议：375 / 768 / 1024 / 1440）：
+ *   手机   ≤ 640px   —— 这里做「触控目标 + 内容优先级」
+ *   平板   ≤ 1024px  —— 两栏结构不变，只放宽间距
+ *   桌面   > 1024px
+ * 之所以取 640 而不是 375：560~640 之间车牌三段 + 车辆卡片已经会挤，按内容换行位置定。
+ */
+
+/* 刘海屏：viewport-fit=cover 会让内容顶到状态栏/刘海下面，
+   固定的顶栏必须自己让开安全区，否则标题会被挡住。 */
+.topbar {
+  padding-top: calc(12px + env(safe-area-inset-top));
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+
+.wrap {
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+
+@media (max-width: 640px) {
+  /* 触控目标：桌面可以紧凑，手机上必须够大 —— 手指点不中就会误触 */
+  .btn-sm,
+  .btn-xs {
+    min-height: var(--tap-min);
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  /* 内容优先级：手机上先看自己的车和拨号记录，
+     「新增车辆」那个长表单排到后面 —— 否则要滚一屏多才能看到自己的车 */
+  body.admin .wrap {
+    display: flex;
+    flex-direction: column;
+  }
+
+  body.admin #notice-area {
+    order: 0;
+  }
+  body.admin .card-account {
+    order: 1;
+  }
+  body.admin .card-cars {
+    order: 2;
+  }
+  body.admin .card-records {
+    order: 3;
+  }
+  body.admin .card-universal {
+    order: 4;
+  }
+  body.admin .card-newcar {
+    order: 5;
+  }
+  body.admin .card-users {
+    order: 6;
+  }
+
+  /* 手机上屏幕窄，卡片内边距收一点，把宽度让给内容 */
+  .card {
+    padding: 16px;
+  }
+
+  /* 车牌三段在 320px 宽的手机上要挤得下 */
+  .plate-input {
+    grid-template-columns: 66px 72px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  /* 扫码页的车牌：小屏上不至于换行 */
+  .hero-plate {
+    font-size: 30px;
+    padding: 10px 20px;
+    letter-spacing: 2px;
+  }
+}
+
+/* 已经很窄的手机（320px 档）：二维码和贴纸预览再收一点 */
+@media (max-width: 360px) {
+  .card {
+    padding: 14px;
+  }
+
+  .hero-plate {
+    font-size: 26px;
+    padding: 9px 16px;
+  }
+}
+
+/* 横屏：手机上高度很矮，别让首屏全被标题吃掉 */
+@media (max-height: 460px) and (orientation: landscape) {
+  .hero {
+    padding-bottom: var(--sp-4);
+  }
+
+  .wrap-scan,
+  .wrap-narrow {
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+}
+
 @media print {
   body {
     background: #fff;

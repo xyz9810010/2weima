@@ -318,6 +318,66 @@ async function inViewport(page, selector) {
     note(badge && badge.width > badge.height ? 'OK' : 'BAD',
       `「启用中」标签没有被挤成竖排（${badge ? Math.round(badge.width) + '×' + Math.round(badge.height) : '?'}px）`);
 
+    /* ---------- 11b. 移动端专项：多尺寸 + 触控 + 内容优先级 ---------- */
+    console.log('\n【11b】移动端专项（320 → 1440 全尺寸，技能清单要求）');
+    for (const w of [320, 375, 414, 768, 1024, 1440]) {
+      await page.setViewportSize({ width: w, height: w <= 414 ? 780 : 900 });
+      await page.goto(`${BASE}/me`, { waitUntil: 'domcontentloaded' });
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      note(!overflow ? 'OK' : 'BAD', `${w}px：无横向滚动`);
+      if (w === 375) await shot(page, '19-mobile-375-dashboard');
+      if (w === 768) await shot(page, '20-tablet-768-dashboard');
+    }
+
+    await page.setViewportSize({ width: 375, height: 780 });
+    await page.goto(`${BASE}/me`, { waitUntil: 'domcontentloaded' });
+    const smallBtn = await page.locator('.car .btn-sm, .car .btn-xs').first().boundingBox();
+    note(smallBtn && smallBtn.height >= 44 ? 'OK' : 'BAD',
+      `手机上小按钮高度 ${smallBtn ? Math.round(smallBtn.height) : '?'}px（技能要求 ≥44）`);
+    const plateRest = await page.locator('input[name="plate_rest"]').first().boundingBox();
+    note(plateRest && plateRest.width >= 90 ? 'OK' : 'WARN', `车牌号码输入框宽度 ${plateRest ? Math.round(plateRest.width) : '?'}px`);
+
+    const order = await page.evaluate(() => {
+      const y = (sel) => {
+        const el = document.querySelector(sel);
+        return el ? Math.round(el.getBoundingClientRect().top + window.scrollY) : -1;
+      };
+      return { cars: y('.card-cars'), newcar: y('.card-newcar') };
+    });
+    note(order.cars > 0 && order.cars < order.newcar ? 'OK' : 'BAD',
+      `手机上先看到自己的车（车 y=${order.cars}，新增表单 y=${order.newcar}）`);
+    await shot(page, '22-mobile-content-priority');
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(`${BASE}/me`, { waitUntil: 'domcontentloaded' });
+    const orderDesk = await page.evaluate(() => {
+      const y = (sel) => {
+        const el = document.querySelector(sel);
+        return el ? Math.round(el.getBoundingClientRect().top + window.scrollY) : -1;
+      };
+      return { cars: y('.card-cars'), newcar: y('.card-newcar') };
+    });
+    note(orderDesk.newcar > 0 && orderDesk.newcar < orderDesk.cars ? 'OK' : 'WARN',
+      `桌面仍是「新增车辆」在前（表单 y=${orderDesk.newcar}，车 y=${orderDesk.cars}）`);
+
+    await page.setViewportSize({ width: 780, height: 380 });
+    await page.goto(`${BASE}/me`, { waitUntil: 'domcontentloaded' });
+    const landOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+    note(!landOverflow ? 'OK' : 'BAD', '横屏无横向滚动');
+    await shot(page, '21-landscape-dashboard');
+
+    // 扫码页在窄屏上，按钮和车牌是否还完好
+    await page.setViewportSize({ width: 320, height: 720 });
+    await page.goto(`${BASE}/c/${code}`, { waitUntil: 'domcontentloaded' });
+    const btn320 = await page.locator('a.btn-call').boundingBox();
+    note(btn320 && btn320.height >= 44 ? 'OK' : 'BAD', `320px 宽下拨号按钮 ${btn320 ? Math.round(btn320.height) : '?'}px`);
+    const plate320 = await page.locator('.hero-plate').boundingBox();
+    note(plate320 && plate320.width <= 288 ? 'OK' : 'BAD', `320px 宽下车牌没有溢出（宽 ${plate320 ? Math.round(plate320.width) : '?'}px）`);
+    await shot(page, '23-scan-320');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${BASE}/me`, { waitUntil: 'domcontentloaded' });
+
     /* ---------- 12. 删除 ---------- */
     console.log('\n【12】删除车辆');
     page.on('dialog', (d) => d.accept());
