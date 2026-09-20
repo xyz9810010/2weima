@@ -49,6 +49,7 @@ let cookie = '';
 async function request(method, pathname, form, options = {}) {
   const headers = {};
   if (options.auth !== false && cookie) headers.cookie = cookie;
+  Object.assign(headers, options.headers || {});
 
   let body;
   if (form) {
@@ -704,7 +705,72 @@ async function run() {
     check('后台不再用 emoji 当警告图标', !adminRow.text.includes('⚠'), '还有 ⚠️');
   }
 
-  section('14. 会话与越权');
+  section('14. 局部刷新（改动不整页重载）');
+  {
+    const ajax = { headers: { 'X-Requested-With': 'fetch' } };
+    const json = (res) => {
+      try { return JSON.parse(res.text); } catch { return null; }
+    };
+
+    const dash = await get('/admin');
+    for (const id of ['notice-area', 'car-list', 'car-count', 'car-actions', 'empty-warn', 'record-area', 'record-actions']) {
+      check(`后台有可替换区域 #${id}`, dash.text.includes(`id="${id}"`), '缺这个 id');
+    }
+    check('改动类表单标了 data-remote', dash.text.includes('data-remote'));
+
+    const before = new Set((dash.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)));
+
+    const created = await request('POST', '/cars', {
+      plate_province: '闽', plate_city: 'd', plate_rest: '6y7u8',
+      owner_name: '', phone: '', call_number: '13800138000', note: '', enabled: 'on',
+    }, ajax);
+    check('AJAX 建车 = 200', created.status === 200, created.status);
+    const payload = json(created);
+    check('返回 JSON 而不是整页', payload !== null && !created.text.includes('<!doctype html>'));
+    check('返回 ok:true', payload && payload.ok === true);
+    check('片段里带上新车', payload && payload.html['car-list'].includes('闽D·6Y7U8'));
+    check('片段里更新了车辆数', payload && payload.html['car-count'].includes('车辆与贴纸'), payload && payload.html['car-count']);
+    check('新建后要求前端重置表单', payload && payload.resetNewCar === true);
+
+    const code = payload ? (payload.html['car-list'].match(/\/c\/([A-Za-z0-9_-]{10})/g) || [])
+      .map((s) => s.slice(3))
+      .find((c) => !before.has(c)) : '';
+    check('从片段里就能取到新编号 ' + code, Boolean(code), code);
+
+    if (code) {
+      const updated = json(await request('POST', `/cars/${code}`, {
+        plate_province: '闽', plate_city: 'D', plate_rest: '6Y7U8',
+        owner_name: '', phone: '', call_number: '13900139000', note: '改过了', enabled: 'on',
+      }, ajax));
+      check('AJAX 保存返回新片段', updated && updated.html['car-list'].includes('13900139000'));
+
+      const bad = await request('POST', `/cars/${code}`, {
+        plate_province: '', plate_city: '', plate_rest: '', plate: '', owner_name: '', phone: '', call_number: '', note: '', enabled: 'on',
+      }, ajax);
+      const badPayload = json(bad);
+      check('AJAX 校验失败 = 400 且带说明', bad.status === 400 && badPayload && badPayload.ok === false && badPayload.notice.includes('没建成'), bad.status);
+
+      const removed = json(await request('POST', `/cars/${code}/delete`, {}, ajax));
+      check('AJAX 删除后片段里没有它', removed && !removed.html['car-list'].includes('闽D·6Y7U8'));
+    }
+
+    // 关键：没有这个头时必须还是普通 302 —— 无 JS 也不能坏
+    const list = await get('/admin');
+    const known = new Set((list.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)));
+    const plain = await post('/cars', {
+      plate_province: '闽', plate_city: 'D', plate_rest: '6Y7U8',
+      owner_name: '', phone: '', call_number: '13800138000', note: '', enabled: 'on',
+    });
+    check('不带 AJAX 头仍然是 302 跳转（无 JS 回退）', plain.status === 302 && plain.location.includes('notice=created'), `${plain.status} ${plain.location}`);
+
+    const after = await get('/admin');
+    const created2 = [...new Set((after.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)))]
+      .find((c) => !known.has(c));
+    if (created2) await post(`/cars/${created2}/delete`);
+    check('测试车已清理', (await get('/admin')).text.includes('车辆与贴纸'));
+  }
+
+  section('15. 会话与越权');
   check('登出 = 302', (await post('/logout')).location === '/login');
   check('登出后后台跳登录页', (await get('/admin')).location === '/login');
   const anon = await post('/cars', { plate: '伪造' }, { auth: false });

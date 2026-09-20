@@ -27,6 +27,11 @@ ${body}
 }
 
 function banner(text, kind = 'error') {
+  return bannerHtml(text, kind);
+}
+
+/** 同一份横幅渲染，AJAX 片段也用它 */
+function bannerHtml(text, kind = 'error') {
   // 错误要立刻被屏幕阅读器读出来，而不是等用户自己逛到那一行
   const role = kind === 'error' ? ' role="alert"' : '';
   return `<div class="banner banner-${esc(kind)}"${role}>${esc(text)}</div>`;
@@ -277,9 +282,15 @@ function plateField(car) {
 </div>`;
 }
 
-function carForm(car, action, submitText) {
+/**
+ * 车辆表单。
+ * remote=true 时表单带 data-remote：有 JS 就 fetch 局部替换，
+ * 没 JS（或 fetch 失败）就照常整页提交 —— 两条路服务端都支持。
+ */
+function carForm(car, action, submitText, { remote = false, carId = '' } = {}) {
   const v = car || {};
-  return `<form method="post" action="${esc(action)}" class="stack">
+  const attrs = remote ? ` data-remote${carId ? ` data-car-id="${esc(carId)}"` : ''}` : '';
+  return `<form method="post" action="${esc(action)}" class="stack"${attrs}>
   ${plateField(car)}
   <div class="grid-2">
     <label class="field">
@@ -366,10 +377,10 @@ function carCard(car, { baseUrl, qrSvg, ownerLabel }) {
     </p>
   </div>
 
-  <details class="car-edit">
+  <details class="car-edit" data-car-id="${esc(car.id)}">
     <summary>编辑资料（换车牌 / 换号码 / 换车都改这里）</summary>
-    ${carForm(car, `/cars/${car.id}`, '保存修改')}
-    <form method="post" action="/cars/${esc(car.id)}/delete" class="danger-zone"
+    ${carForm(car, `/cars/${car.id}`, '保存修改', { remote: true, carId: car.id })}
+    <form method="post" action="/cars/${esc(car.id)}/delete" class="danger-zone" data-remote
           data-confirm="确定删除车辆 ${esc(car.plate || car.id)}？该车的拨号记录也会一起删除。">
       <button class="btn btn-sm btn-danger" type="submit">删除该车辆</button>
     </form>
@@ -389,9 +400,68 @@ function callRow(record) {
   <div class="msg-content">有人点了一次「一键拨号」</div>
   <div class="msg-foot">
     <span class="muted">只记录次数与时间，不记录任何扫码人信息</span>
-    ${unread ? `<form method="post" action="/messages/${esc(record.id)}/read"><button class="btn btn-xs btn-ghost" type="submit">标记已读</button></form>` : ''}
+    ${unread ? `<form method="post" action="/messages/${esc(record.id)}/read" data-remote><button class="btn btn-xs btn-ghost" type="submit">标记已读</button></form>` : ''}
   </div>
 </li>`;
+}
+
+/* ------------------------------------------------------------------ */
+/* 后台的可替换片段                                                    */
+/*                                                                     */
+/* 这些片段首屏渲染和 AJAX 局部刷新共用同一份实现 —— 只有一套模板，      */
+/* 不会出现「点一下变了样」的漂移。                                     */
+/* ------------------------------------------------------------------ */
+
+function carListHtml(cars, { baseUrl, isAdmin }) {
+  if (!cars.length) {
+    return `<p class="muted">${isAdmin ? '还没有车辆，先在上面添加一辆。' : '还没有车辆，先添加一辆你的车。'}</p>`;
+  }
+  return cars
+    .map((car) =>
+      carCard(car, {
+        baseUrl,
+        qrSvg: car.qrSvg,
+        ownerLabel: isAdmin && car.owner_contact ? `车主 ${car.owner_contact}` : '',
+      })
+    )
+    .join('\n');
+}
+
+function emptyWarnHtml(emptyCount) {
+  if (!emptyCount) return '';
+  return `<div class="banner banner-error">
+      有 ${emptyCount} 辆车是空白的（车牌、号码全没有），扫码打开什么也做不了。
+      <form method="post" action="/admin/cleanup-empty" style="display:inline" data-remote
+            data-confirm="确定删除这 ${emptyCount} 辆空白车辆吗？">
+        <button class="btn btn-xs btn-danger" type="submit">清理这 ${emptyCount} 辆</button>
+      </form>
+    </div>`;
+}
+
+function recordListHtml(messages) {
+  return messages.length
+    ? `<ul class="msg-list">${messages.map(callRow).join('\n')}</ul>`
+    : '<p class="muted">还没有人拨号。</p>';
+}
+
+function recordActionsHtml(unread) {
+  return unread
+    ? '<form method="post" action="/messages/read-all" data-remote><button class="btn btn-sm btn-ghost" type="submit">全部标记已读</button></form>'
+    : '';
+}
+
+function userListHtml(users) {
+  if (!users.length) return '<p class="muted">还没有车主注册。</p>';
+  return `<ul class="user-list">${users
+    .map(
+      (u) => `<li class="user-row">
+        <span class="user-contact">${esc(u.contact)}</span>
+        ${u.name ? `<span class="user-name">${esc(u.name)}</span>` : ''}
+        <span class="user-cars">${Number(u.car_count) || 0} 辆车</span>
+        <span class="user-time">${esc(fmtTime(u.created_at))}</span>
+      </li>`
+    )
+    .join('\n')}</ul>`;
 }
 
 function adminPage({
@@ -408,43 +478,15 @@ function adminPage({
   cleanedCount = 0,
 }) {
   const isAdmin = mode === 'admin';
-  const carSection = cars.length
-    ? cars
-        .map((car) =>
-          carCard(car, {
-            baseUrl,
-            qrSvg: car.qrSvg,
-            ownerLabel: isAdmin && car.owner_contact ? `车主 ${car.owner_contact}` : '',
-          })
-        )
-        .join('\n')
-    : `<p class="muted">${isAdmin ? '还没有车辆，先在上面添加一辆。' : '还没有车辆，先添加一辆你的车。'}</p>`;
-
-  const recordSection = messages.length
-    ? `<ul class="msg-list">${messages.map(callRow).join('\n')}</ul>`
-    : '<p class="muted">还没有人拨号。</p>';
 
   const userSection = !isAdmin
     ? ''
     : `<section class="card">
     <div class="card-head">
-      <h2 class="card-title">车主账号（${users.length}）</h2>
+      <h2 class="card-title" id="user-count">车主账号（${users.length}）</h2>
     </div>
     <p class="hint">每个车主一个账号，只能看到和管理自己的车。</p>
-    ${
-      users.length
-        ? `<ul class="user-list">${users
-            .map(
-              (u) => `<li class="user-row">
-        <span class="user-contact">${esc(u.contact)}</span>
-        ${u.name ? `<span class="user-name">${esc(u.name)}</span>` : ''}
-        <span class="user-cars">${Number(u.car_count) || 0} 辆车</span>
-        <span class="user-time">${esc(fmtTime(u.created_at))}</span>
-      </li>`
-            )
-            .join('\n')}</ul>`
-        : '<p class="muted">还没有车主注册。</p>'
-    }
+    <div id="user-area">${userListHtml(users)}</div>
   </section>`;
 
   // 通用码只对平台方有意义：它只认平台自己录的车（owner_id 为空）
@@ -486,13 +528,13 @@ function adminPage({
     body: `<header class="topbar">
   <div class="brand">挪车码 · ${isAdmin ? '平台后台' : '我的车辆'}</div>
   <div class="topbar-right">
-    <span class="badge ${unread ? 'badge-new' : 'badge-on'}">未读 ${unread}</span>
+    <span class="badge ${unread ? 'badge-new' : 'badge-on'}" id="unread-badge">未读 ${unread}</span>
     <form method="post" action="/logout"><button class="btn btn-sm btn-ghost" type="submit">退出</button></form>
   </div>
 </header>
 
 <main class="wrap">
-  ${notice ? banner(notice.text, notice.kind) : ''}
+  <div id="notice-area">${notice ? banner(notice.text, notice.kind) : ''}</div>
   ${
     isAdmin
       ? `<section class="card">
@@ -510,37 +552,25 @@ function adminPage({
 
   <section class="card">
     <h2 class="card-title">新增车辆</h2>
-    ${carForm(null, '/cars', '生成挪车码')}
+    ${carForm(null, '/cars', '生成挪车码', { remote: true })}
     <p class="hint">至少要填「车牌」或一个号码 —— 什么都不填的记录建了也没用，会被拦下来。</p>
   </section>
 
   <section class="card">
     <div class="card-head">
-      <h2 class="card-title">车辆与贴纸（${cars.length}）</h2>
-      ${cars.length ? `<a class="btn btn-sm btn-primary" href="/print-all" target="_blank" rel="noreferrer">批量打印全部贴纸</a>` : ''}
+      <h2 class="card-title" id="car-count">车辆与贴纸（${cars.length}）</h2>
+      <div id="car-actions">
+        ${cars.length ? `<a class="btn btn-sm btn-primary" href="/print-all" target="_blank" rel="noreferrer">批量打印全部贴纸</a>` : ''}
+      </div>
     </div>
     <p class="hint">
       <b>一车一码</b>：每辆车有自己的码，扫码直接进那一辆，扫码人不用选。
       批量打印会把所有车的贴纸排在一页里一次打完。
       改车牌、改号码都不用重新打印。
     </p>
-    ${
-      isAdmin && emptyCount
-        ? `<div class="banner banner-error">
-      有 ${emptyCount} 辆车是空白的（车牌、号码全没有），扫码打开什么也做不了。
-      <form method="post" action="/admin/cleanup-empty" style="display:inline"
-            data-confirm="确定删除这 ${emptyCount} 辆空白车辆吗？">
-        <button class="btn btn-xs btn-danger" type="submit">清理这 ${emptyCount} 辆</button>
-      </form>
-    </div>`
-        : ''
-    }
-    ${
-      cleanedCount
-        ? `<p class="hint">刚才清理掉了 ${cleanedCount} 辆空白车辆。</p>`
-        : ''
-    }
-    <div class="car-list">${carSection}</div>
+    <div id="empty-warn">${emptyWarnHtml(isAdmin ? emptyCount : 0)}</div>
+    ${cleanedCount ? `<p class="hint">刚才清理掉了 ${cleanedCount} 辆空白车辆。</p>` : ''}
+    <div class="car-list" id="car-list">${carListHtml(cars, { baseUrl, isAdmin })}</div>
   </section>
 
   ${universalSection}
@@ -548,10 +578,10 @@ function adminPage({
   <section class="card">
     <div class="card-head">
       <h2 class="card-title">拨号记录</h2>
-      ${unread ? `<form method="post" action="/messages/read-all"><button class="btn btn-sm btn-ghost" type="submit">全部标记已读</button></form>` : ''}
+      <div id="record-actions">${recordActionsHtml(unread)}</div>
     </div>
     <p class="hint">这里只记「有人点了一次拨号按钮」，不记录扫码人的 IP、设备信息，也不记录通话内容与号码。</p>
-    ${recordSection}
+    <div id="record-area">${recordListHtml(messages)}</div>
   </section>
 
   ${userSection}
@@ -666,6 +696,12 @@ module.exports = {
   messagePage,
   loginPage,
   adminPage,
+  bannerHtml,
+  carListHtml,
+  emptyWarnHtml,
+  recordListHtml,
+  recordActionsHtml,
+  userListHtml,
   printPage,
   printAllPage,
 };

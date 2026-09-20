@@ -36,6 +36,137 @@
     }
   });
 
+  // 6) 局部刷新：data-remote 的表单用 fetch 提交，只换变化的片段，不整页重载。
+  //    没有 JS、或服务端没按 AJAX 回应时，照常整页提交。
+  var FRAGMENT_IDS = [
+    'notice-area',
+    'car-count',
+    'car-actions',
+    'car-list',
+    'empty-warn',
+    'record-area',
+    'record-actions',
+    'user-count',
+    'user-area',
+  ];
+
+  function openEditIds() {
+    // 记住哪些「编辑资料」是展开的，换完片段再展开回去，免得每次保存都被收起
+    var ids = [];
+    var nodes = document.querySelectorAll('details.car-edit[open]');
+    for (var i = 0; i < nodes.length; i++) {
+      ids.push(nodes[i].getAttribute('data-car-id') || '');
+    }
+    return ids;
+  }
+
+  function restoreOpenEdits(ids) {
+    if (!ids || !ids.length) return;
+    for (var i = 0; i < ids.length; i++) {
+      if (!ids[i]) continue;
+      var node = document.querySelector('details.car-edit[data-car-id="' + ids[i] + '"]');
+      if (node) node.open = true;
+    }
+  }
+
+  function applyFragments(payload) {
+    var opened = openEditIds();
+    var html = payload.html || {};
+    for (var i = 0; i < FRAGMENT_IDS.length; i++) {
+      var id = FRAGMENT_IDS[i];
+      if (!(id in html)) continue;
+      var el = document.getElementById(id);
+      if (el) el.innerHTML = html[id];
+    }
+    restoreOpenEdits(opened);
+
+    var badge = document.getElementById('unread-badge');
+    if (badge && typeof payload.unread === 'number') {
+      badge.textContent = '未读 ' + payload.unread;
+      badge.className = 'badge ' + (payload.unread ? 'badge-new' : 'badge-on');
+    }
+  }
+
+  function setPending(form, pending) {
+    var buttons = form.querySelectorAll('button[type="submit"]');
+    for (var i = 0; i < buttons.length; i++) {
+      var btn = buttons[i];
+      if (pending) {
+        btn.setAttribute('data-label', btn.textContent);
+        btn.disabled = true;
+        btn.textContent = '处理中…';
+      } else if (btn.getAttribute('data-label')) {
+        btn.disabled = false;
+        btn.textContent = btn.getAttribute('data-label');
+        btn.removeAttribute('data-label');
+      }
+    }
+  }
+
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || !form.getAttribute || !form.hasAttribute('data-remote')) return;
+    if (!window.fetch || !window.FormData) return; // 老浏览器：走原来的整页提交
+    if (event.defaultPrevented) return; // 二次确认里点了取消
+
+    event.preventDefault();
+
+    var action = form.getAttribute('action') || window.location.pathname;
+    setPending(form, true);
+
+    fetch(action, {
+      method: 'POST',
+      body: new FormData(form),
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'fetch' },
+    })
+      .then(function (res) {
+        var type = res.headers.get('content-type') || '';
+        if (type.indexOf('application/json') < 0) {
+          // 服务端没走 AJAX（例如会话过期跳登录页）：老老实实整页跳过去
+          window.location.href = res.url || window.location.href;
+          return null;
+        }
+        return res.json().then(function (payload) {
+          return { status: res.status, payload: payload };
+        });
+      })
+      .then(function (result) {
+        setPending(form, false);
+        if (!result) return;
+
+        var payload = result.payload || {};
+        if (!payload.ok) {
+          var area = document.getElementById('notice-area');
+          if (area && payload.notice) {
+            area.innerHTML =
+              '<div class="banner banner-' +
+              (payload.kind === 'error' ? 'error' : 'info') +
+              '"' +
+              (payload.kind === 'error' ? ' role="alert"' : '') +
+              '>' +
+              payload.notice +
+              '</div>';
+          }
+          return;
+        }
+
+        applyFragments(payload);
+
+        var newCarForm = form.hasAttribute('data-car-id') ? null : form;
+        if (newCarForm && payload.resetNewCar) {
+          newCarForm.reset();
+          newCarForm.dispatchEvent(new Event('change', { bubbles: true }));
+          if (window.__chezaiRestoreProvince) window.__chezaiRestoreProvince();
+        }
+      })
+      .catch(function () {
+        // 网络出问题就退回普通提交，别让用户点了没反应
+        setPending(form, false);
+        form.submit();
+      });
+  });
+
   // 3) 打印按钮
   document.addEventListener('click', function (event) {
     var target = event.target;
@@ -134,8 +265,9 @@
 
   updatePlatePreview();
 
-  // 新增车辆时带出上次用过的省份，编辑已有车辆时不动
-  (function restoreProvince() {
+  // 新增车辆时带出上次用过的省份，编辑已有车辆时不动。
+  // 局部刷新提交成功后表单会被 reset，那时也要靠它把省份补回来。
+  function restoreProvince() {
     var el = plateEls();
     if (!el.province || el.province.value) return;
     try {
@@ -147,5 +279,8 @@
     } catch (error) {
       /* 忽略 */
     }
-  })();
+  }
+
+  window.__chezaiRestoreProvince = restoreProvince;
+  restoreProvince();
 })();

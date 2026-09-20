@@ -810,6 +810,22 @@ textarea:focus {
   font-size: 14px;
   margin-bottom: 14px;
   border: 1px solid var(--line);
+  /* 局部刷新后新出现的提示轻微淡入即可，不做位移，免得画面跳动 */
+  animation: banner-in 0.18s ease-out;
+}
+
+@keyframes banner-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 局部刷新：正在提交的按钮给个明确状态，避免用户重复点 */
+.btn[disabled] {
+  cursor: progress;
 }
 
 .banner-error {

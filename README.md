@@ -266,6 +266,10 @@ Node 的 `node:sqlite` 其实是同步的，这里刻意包成 async —— 为�
   可点区域不小于 `--tap-min`（44px）；扫码页底部留 `safe-area-inset`。
 - **键盘焦点必须可见**（`:focus-visible`），错误提示带 `role="alert"`，
   并且尊重系统的 `prefers-reduced-motion`。
+- **改动不整页刷新**：后台的表单带 `data-remote`，前端用 `fetch` 提交，
+  服务端只回需要替换的片段（`{html: {id: innerHTML}}`），页面不重载 ——
+  所以编辑面板不会每次保存都被收起、滚动位置也不会丢。
+  没有 JS 时这些表单照旧整页提交，服务端两条路都支持。
 
 这几条在 `npm run e2e` 里有对应的断言，改坏了会被拦下来。
 

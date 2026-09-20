@@ -99,6 +99,13 @@ async function handleRequest(request, env) {
     method: request.method,
     pathname: url.pathname,
     url,
+    // 共享层要看 x-requested-with 判断是不是 AJAX
+    headers: {
+      'x-requested-with': request.headers.get('x-requested-with') || '',
+      cookie: request.headers.get('cookie') || '',
+      host: url.host,
+      'user-agent': request.headers.get('user-agent') || '',
+    },
     cookie: request.headers.get('cookie') || '',
     ip: clientIp(request),
     origin: url.origin,

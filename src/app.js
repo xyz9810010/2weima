@@ -489,7 +489,8 @@ function createApp(options) {
 
   /* --------------------------- 车主 / 平台后台 --------------------------- */
 
-  async function renderDashboard(session, req, url) {
+  /** 首屏和「局部刷新」共用同一份数据加载，避免两边算出不一样的结果 */
+  async function loadDashboard(session, req) {
     const base = baseUrlOf(req);
     const isAdmin = session.kind === 'admin';
 
@@ -510,37 +511,93 @@ function createApp(options) {
       );
     }
 
-    const enabledCars = cars.filter((car) => car.enabled);
+    return {
+      base,
+      isAdmin,
+      account: isAdmin ? null : await store.getUser(session.userId),
+      users,
+      cars,
+      messages: isAdmin
+        ? await store.listMessages(100)
+        : await store.listMessagesByOwner(session.userId, 100),
+      unread: isAdmin ? await store.countUnread() : await store.countUnreadByOwner(session.userId),
+      emptyCount: isAdmin
+        ? cars.filter((car) => !car.plate && !car.phone && !car.call_number).length
+        : 0,
+    };
+  }
+
+  function universalInfo(data) {
+    if (!data.isAdmin) return null;
+    const enabled = data.cars.filter((car) => car.enabled);
+    return {
+      url: universalUrl(data.base),
+      qrSvg: qrSvgForContent(universalUrl(data.base)),
+      enabledCount: enabled.length,
+      plates: enabled.map((car) => car.plate || '未填写车牌'),
+    };
+  }
+
+  async function renderDashboard(session, req, url) {
+    const data = await loadDashboard(session, req);
     const noticeKey = url.searchParams.get('notice');
 
     return htmlResponse(
       200,
       views.adminPage({
-        mode: isAdmin ? 'admin' : 'owner',
-        account: isAdmin ? null : await store.getUser(session.userId),
-        cars,
-        messages: isAdmin
-          ? await store.listMessages(100)
-          : await store.listMessagesByOwner(session.userId, 100),
-        users,
-        baseUrl: base,
-        // 通用码是平台级的（只认平台方自己录的车），车主后台不展示
-        universal: isAdmin
-          ? {
-              url: universalUrl(base),
-              qrSvg: qrSvgForContent(universalUrl(base)),
-              enabledCount: enabledCars.length,
-              plates: enabledCars.map((car) => car.plate || '未填写车牌'),
-            }
-          : null,
-        unread: isAdmin ? await store.countUnread() : await store.countUnreadByOwner(session.userId),
+        mode: data.isAdmin ? 'admin' : 'owner',
+        account: data.account,
+        cars: data.cars,
+        messages: data.messages,
+        users: data.users,
+        baseUrl: data.base,
+        universal: universalInfo(data),
+        unread: data.unread,
         notice: noticeKey && NOTICES[noticeKey] ? NOTICES[noticeKey] : null,
         cleanedCount: Number(url.searchParams.get('n')) || 0,
-        emptyCount: isAdmin
-          ? cars.filter((car) => !car.plate && !car.phone && !car.call_number).length
-          : 0,
+        emptyCount: data.emptyCount,
       })
     );
+  }
+
+  /** 前端带了这个头就是「别整页刷新，给我片段」 */
+  function wantsFragments(req) {
+    const headers = (req && req.headers) || {};
+    return String(headers['x-requested-with'] || '').toLowerCase() === 'fetch';
+  }
+
+  /**
+   * 改动完成后的响应。
+   *   - AJAX：返回需要替换的片段（id → innerHTML），页面不重载
+   *   - 普通表单提交：照旧 302 回后台（没有 JS 也能用）
+   */
+  async function afterChange(session, req, url, noticeKey) {
+    if (!wantsFragments(req)) {
+      return redirectResponse(`${homeFor(session)}?notice=${noticeKey}`);
+    }
+
+    const data = await loadDashboard(session, req);
+    const notice = NOTICES[noticeKey];
+
+    return jsonResponse(200, {
+      ok: true,
+      html: {
+        'notice-area': notice ? views.bannerHtml(notice.text, notice.kind) : '',
+        'car-count': `车辆与贴纸（${data.cars.length}）`,
+        'car-actions': data.cars.length
+          ? '<a class="btn btn-sm btn-primary" href="/print-all" target="_blank" rel="noreferrer">批量打印全部贴纸</a>'
+          : '',
+        'car-list': views.carListHtml(data.cars, { baseUrl: data.base, isAdmin: data.isAdmin }),
+        'empty-warn': views.emptyWarnHtml(data.emptyCount),
+        'record-area': views.recordListHtml(data.messages),
+        'record-actions': views.recordActionsHtml(data.unread),
+        'user-count': `车主账号（${data.users.length}）`,
+        'user-area': views.userListHtml(data.users),
+      },
+      unread: data.unread,
+      carCount: data.cars.length,
+      resetNewCar: noticeKey === 'created',
+    });
   }
 
   async function handleAdminHome(req, url) {
@@ -581,13 +638,17 @@ function createApp(options) {
     throw new Error('无法生成唯一编号');
   }
 
-  async function handleCreateCar(req) {
+  async function handleCreateCar(req, url) {
     const session = await currentSession(req);
     if (!session) return redirectResponse('/login');
     const fields = collectCarFields(core.parseForm(await req.readText()));
 
     // 空表单不建记录：否则后台很快堆满「未填写车牌」，通用码还会把它们列给扫码人看
-    if (!carHasIdentity(fields)) return redirectResponse(`${homeFor(session)}?notice=needinfo`);
+    if (!carHasIdentity(fields)) {
+      return wantsFragments(req)
+        ? jsonResponse(400, { ok: false, notice: NOTICES.needinfo.text, kind: NOTICES.needinfo.kind })
+        : redirectResponse(`${homeFor(session)}?notice=needinfo`);
+    }
 
     await store.createCar(
       Object.assign(
@@ -599,7 +660,7 @@ function createApp(options) {
         fields
       )
     );
-    return redirectResponse(`${homeFor(session)}?notice=created`);
+    return afterChange(session, req, url, 'created');
   }
 
   async function handleUpdateCar(req, url, params) {
@@ -607,18 +668,22 @@ function createApp(options) {
     const found = await loadCarFor(session, params[0]);
     if (found.error) return found.error;
     const fields = collectCarFields(core.parseForm(await req.readText()));
-    if (!carHasIdentity(fields)) return redirectResponse(`${homeFor(session)}?notice=needinfo`);
+    if (!carHasIdentity(fields)) {
+      return wantsFragments(req)
+        ? jsonResponse(400, { ok: false, notice: NOTICES.needinfo.text, kind: NOTICES.needinfo.kind })
+        : redirectResponse(`${homeFor(session)}?notice=needinfo`);
+    }
     await store.updateCar(found.car.id, fields);
-    return redirectResponse(`${homeFor(session)}?notice=updated`);
+    return afterChange(session, req, url, 'updated');
   }
 
   /** 平台方专用：一次清掉所有空白车辆（车牌、号码全没有的） */
-  async function handleCleanupEmpty(req) {
+  async function handleCleanupEmpty(req, url) {
     const session = await currentSession(req);
     if (!session) return redirectResponse('/login');
     if (session.kind !== 'admin') return redirectResponse('/me');
-    const removed = await store.deleteEmptyCars();
-    return redirectResponse(`/admin?notice=cleaned&n=${removed}`);
+    await store.deleteEmptyCars();
+    return afterChange(session, req, url, 'cleaned');
   }
 
   async function handleDeleteCar(req, url, params) {
@@ -626,7 +691,7 @@ function createApp(options) {
     const found = await loadCarFor(session, params[0]);
     if (found.error) return found.error;
     await store.deleteCar(found.car.id);
-    return redirectResponse(`${homeFor(session)}?notice=deleted`);
+    return afterChange(session, req, url, 'deleted');
   }
 
   /** 通用二维码只服务平台方自己录的车（owner_id 为空），不碰车主的车 */
@@ -736,14 +801,14 @@ function createApp(options) {
     const session = await currentSession(req);
     if (!session) return redirectResponse('/login');
     await store.markRead(params[0], session.kind === 'user' ? session.userId : null);
-    return redirectResponse(homeFor(session));
+    return afterChange(session, req, url, 'read');
   }
 
-  async function handleMarkAllRead(req) {
+  async function handleMarkAllRead(req, url) {
     const session = await currentSession(req);
     if (!session) return redirectResponse('/login');
     await store.markAllRead(session.kind === 'user' ? session.userId : null);
-    return redirectResponse(homeFor(session));
+    return afterChange(session, req, url, 'read');
   }
 
   /* ----------------------------- 路由表 ---------------------------- */
