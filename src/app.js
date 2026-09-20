@@ -171,6 +171,25 @@ function createApp(options) {
     return htmlResponse(200, views.scanPage(car, { dialNumber: dialNumberOf(car) }));
   }
 
+  /**
+   * 拨号打点的限流放在内存里：既不落库，也不记录任何能指向扫码人的东西。
+   * 键是车辆编号而不是 IP —— 连「处理一下扫码人的 IP」这一步都省掉。
+   * isolate 重启即清空；宁可少限一点，也不留数据。
+   */
+  const callLogThrottle = new Map();
+
+  function allowCallLog(carId) {
+    const now = Date.now();
+    const state = callLogThrottle.get(carId);
+    if (!state || now >= state.resetAt) {
+      if (callLogThrottle.size > 1000) callLogThrottle.clear();
+      callLogThrottle.set(carId, { count: 1, resetAt: now + CALL_WINDOW_MS });
+      return true;
+    }
+    state.count += 1;
+    return state.count <= CALL_LOG_LIMIT;
+  }
+
   async function handlePostCall(req, url, params) {
     // sendBeacon 会带一个很小的 body，顺手读完，避免连接被重置
     try {
@@ -183,20 +202,10 @@ function createApp(options) {
     if (!car || !car.enabled || !dialNumberOf(car)) {
       return jsonResponse(404, { ok: false });
     }
+    if (!allowCallLog(car.id)) return jsonResponse(429, { ok: false });
 
-    const allowed = await store.bumpRateLimit(`call:${req.ip}`, CALL_WINDOW_MS, CALL_LOG_LIMIT);
-    if (!allowed) return jsonResponse(429, { ok: false });
-
-    // 只记「有人点了一次拨号」，号码和通话内容一概不落库
-    await store.addMessage({
-      car_id: car.id,
-      kind: 'call',
-      reason: '',
-      content: '',
-      contact: '',
-      ip: req.ip,
-      ua: core.truncate(req.userAgent, 200),
-    });
+    // 只落一行「哪辆车、什么时候」，不写 IP、不写 UA、不写号码
+    await store.addCallLog(car.id);
     return jsonResponse(200, { ok: true });
   }
 

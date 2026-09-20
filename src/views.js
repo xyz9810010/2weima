@@ -203,7 +203,7 @@ function callRow(record) {
   </div>
   <div class="msg-content">有人点了一次「一键拨号」</div>
   <div class="msg-foot">
-    <span class="muted">${esc(record.ip)}</span>
+    <span class="muted">只记录次数与时间，不记录任何扫码人信息</span>
     ${unread ? `<form method="post" action="/admin/messages/${esc(record.id)}/read"><button class="btn btn-xs btn-ghost" type="submit">标记已读</button></form>` : ''}
   </div>
 </li>`;
@@ -256,7 +256,7 @@ function adminPage({ cars, messages, baseUrl, unread, notice }) {
       <h2 class="card-title">拨号记录</h2>
       ${unread ? '<form method="post" action="/admin/messages/read-all"><button class="btn btn-sm btn-ghost" type="submit">全部标记已读</button></form>' : ''}
     </div>
-    <p class="hint">这里只记录「有人点了一次拨号按钮」，不记录通话内容与号码。</p>
+    <p class="hint">这里只记「有人点了一次拨号按钮」，不记录扫码人的 IP、设备信息，也不记录通话内容与号码。</p>
     ${recordSection}
   </section>
 </main>`,

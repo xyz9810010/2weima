@@ -20,21 +20,23 @@ CREATE TABLE IF NOT EXISTS cars (
   updated_at  INTEGER NOT NULL
 );
 
+-- 拨号记录。
+-- 表名 messages 是历史遗留（早期版本这里存扫码人的留言），现在一行 = 一次拨号打点。
+--
+-- 刻意没有 ip / ua 这类列：不存储任何能指向扫码人的信息。
+-- 一行记录只有「哪辆车、什么时候、读没读」。
 CREATE TABLE IF NOT EXISTS messages (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   car_id     TEXT NOT NULL REFERENCES cars(id) ON DELETE CASCADE,
-  kind       TEXT NOT NULL DEFAULT 'message',
+  kind       TEXT NOT NULL DEFAULT 'call',
   reason     TEXT NOT NULL DEFAULT '',
   content    TEXT NOT NULL DEFAULT '',
   contact    TEXT NOT NULL DEFAULT '',
-  ip         TEXT NOT NULL DEFAULT '',
-  ua         TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL,
   read_at    INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_car ON messages (car_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_messages_ip ON messages (car_id, ip, created_at);
 
 -- 扫码方限流直接用 messages 表统计，这里只服务后台登录限流
 CREATE TABLE IF NOT EXISTS rate_limits (

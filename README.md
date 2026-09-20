@@ -158,9 +158,10 @@ scripts/         start.js（Node 启动）、selftest.js（编码器自检）、
 
 分层的关键是两道接缝：
 
-- **请求/响应是普通对象**。`src/app.js` 只认识 `{method, pathname, url, cookie, ip, userAgent, origin, readText}`，
+- **请求/响应是普通对象**。`src/app.js` 只认识 `{method, pathname, url, cookie, ip, origin, readText}`，
   返回 `{status, headers, body}`。Node 适配层把它变成 `http.ServerResponse`，Worker 适配层变成 `Response`。
-- **store 是纯异步接口**。`getCar / addMessage / countRecentByIp / bumpRateLimit …` 两边签名一致，
+  （没有 `userAgent` —— 应用层根本不看 UA，也就无从记录。）
+- **store 是纯异步接口**。`getCar / addCallLog / listMessages / bumpRateLimit …` 两边签名一致，
   所以共享层 `await` 谁都不知道自己跑在哪。
 
 Node 的 `node:sqlite` 其实是同步的，这里刻意包成 async —— 为了和 D1 对齐，代价是零。
@@ -171,12 +172,27 @@ Node 的 `node:sqlite` 其实是同步的，这里刻意包成 async —— 为�
 
 扫码页上只有一个「一键拨号」按钮，**不提供留言**，页面本身不展示任何号码（号码只在 `tel:` 链接里）。
 
-| 数据 | 存放位置 | 是否返回给扫码人 |
+**不采集任何扫码人信息。** 具体地说，扫码人的 IP、UA、设备、位置、停留时间一概不落库 ——
+拨号记录表里连 `ip` / `ua` 这两列都没有，一行记录只有「哪辆车、什么时候、读没读」：
+
+```sql
+CREATE TABLE messages (          -- 表名是历史遗留，现在一行 = 一次拨号
+  id, car_id, kind, reason, content, contact, created_at, read_at
+);
+```
+
+连「谁点的」这件事本身都不记录，所以也不存在按 IP 限流 —— 拨号打点的限流放在进程内存里，
+键是车辆编号而不是 IP（连处理扫码人 IP 这一步都省了）。
+
+| 数据 | 存放位置 | 说明 |
 | --- | --- | --- |
 | 拨号号码 `call_number` | 数据库 | 只出现在 `tel:` 链接里。设计上填隐私号 / 虚拟号 |
 | 真实手机号 `phone` | 数据库 | 平时不返回。**但拨号号码留空时会退化成拨打它**（见下） |
-| 扫码人 IP、UA | 数据库 | 不返回，只记录「有人点了一次拨号」 |
-| 通话内容、拨出号码 | 不采集 | —— |
+| 扫码人信息 | **不采集** | 不记 IP、不记 UA、不记设备 |
+| 通话内容、拨出号码 | **不采集** | 只记「点了一次按钮」 |
+
+> 平台层面另说：Cloudflare 自己会保留请求级日志与分析数据，这不是应用代码能控制的。
+> 这个部署里 Workers Logs / Traces 都是关的；如果在意，别在面板里打开它们。
 
 **关于两个号码的关系**（这一点容易被误解）：
 
@@ -189,9 +205,12 @@ Node 的 `node:sqlite` 其实是同步的，这里刻意包成 async —— 为�
 
 - 车辆编号是 10 位随机码（去掉易混字符的 58 字符表，且做了拒绝采样避免取模偏差），不可枚举；后台可随时停用某个码
 - 后台只记录「有人点了一次拨号」，**不记录通话内容，也不记录拨出号码**
-- 拨号打点限流：同一 IP 10 分钟最多 30 次（只影响记录写入，不影响用户能不能拨出去）
+- 拨号打点限流在内存里做（按车辆编号，10 分钟 30 次），不写库、不记 IP；只影响记录写入，不影响用户能不能拨出去
 - 会话是 HMAC-SHA256 签名的 HttpOnly Cookie，`SameSite=Lax`（跨站 POST 不带 Cookie，等于自带 CSRF 防护），12 小时过期
 - 全站 CSP `default-src 'none'`，所有输出经过 HTML 转义
+
+> 唯一还会用到 IP 的地方是**后台登录限流**（`rate_limits` 表，10 分钟窗口）——
+> 记的是车主你自己的 IP，用来防在线猜密码，扫码人的 IP 不经过这里。
 
 ---
 

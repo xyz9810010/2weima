@@ -174,6 +174,27 @@ async function run() {
   check('后台看到拨号记录', admin2.text.includes('有人点了一次「一键拨号」'));
   check('后台能看到车主填的号码（仅车主侧）', admin2.text.includes(REAL_PHONE));
 
+  // 只针对「拨号记录」这块列表断言（页面别处会合法地出现 baseUrl 里的主机名）
+  {
+    const recordArea = (admin2.text.match(/<ul class="msg-list">[\s\S]*?<\/ul>/) || [''])[0];
+    check(
+      '【隐私】拨号记录区域不含任何 IP',
+      recordArea.length > 0 && !/\d{1,3}(\.\d{1,3}){3}|::1|::ffff/.test(recordArea),
+      recordArea.slice(0, 160)
+    );
+  }
+
+  // 最硬的一条：直接看表结构，确认根本没有能存 IP / UA 的地方
+  {
+    const { DatabaseSync } = require('node:sqlite');
+    const db = new DatabaseSync(path.join(DATA_DIR, 'chezai.db'));
+    const cols = db.prepare('PRAGMA table_info(messages)').all().map((c) => c.name);
+    const rows = db.prepare('SELECT * FROM messages').all();
+    db.close();
+    check('【隐私】拨号记录表没有 ip / ua 列', !cols.includes('ip') && !cols.includes('ua'), cols.join(','));
+    check('【隐私】拨号记录每行只关联车辆与时间', rows.length === 1 && rows[0].car_id === code, JSON.stringify(rows[0] || {}).slice(0, 120));
+  }
+
   section('3. 只填真实手机号时，也必须能拨号（回归）');
   const onlyPhone = await post('/admin/cars', {
     plate: '京B·00001',

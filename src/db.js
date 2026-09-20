@@ -56,9 +56,9 @@ function createStore(dataDir) {
     `),
     deleteCar: db.prepare('DELETE FROM cars WHERE id = ?'),
 
-    insertMessage: db.prepare(`
-      INSERT INTO messages (car_id, kind, reason, content, contact, ip, ua, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    insertCallLog: db.prepare(`
+      INSERT INTO messages (car_id, kind, reason, content, contact, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `),
     listMessages: db.prepare(`
       SELECT messages.*, cars.plate AS plate
@@ -152,17 +152,8 @@ function createStore(dataDir) {
       return stmt.deleteCar.run(String(id)).changes > 0;
     },
 
-    async addMessage(message) {
-      const info = stmt.insertMessage.run(
-        String(message.car_id),
-        message.kind === 'call' ? 'call' : 'message',
-        message.reason || '',
-        message.content || '',
-        message.contact || '',
-        message.ip || '',
-        message.ua || '',
-        Date.now()
-      );
+    async addCallLog(carId) {
+      const info = stmt.insertCallLog.run(String(carId), 'call', '', '', '', Date.now());
       return Number(info.lastInsertRowid);
     },
 

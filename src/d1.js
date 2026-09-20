@@ -105,17 +105,15 @@ function createStore(db) {
       return Boolean(result.meta && result.meta.changes);
     },
 
-    async addMessage(message) {
+    async addCallLog(carId) {
       const result = await run(
-        `INSERT INTO messages (car_id, kind, reason, content, contact, ip, ua, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        String(message.car_id),
-        message.kind === 'call' ? 'call' : 'message',
-        message.reason || '',
-        message.content || '',
-        message.contact || '',
-        message.ip || '',
-        message.ua || '',
+        `INSERT INTO messages (car_id, kind, reason, content, contact, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        String(carId),
+        'call',
+        '',
+        '',
+        '',
         Date.now()
       );
       return result.meta ? Number(result.meta.last_row_id) : 0;

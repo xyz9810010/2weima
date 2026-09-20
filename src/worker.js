@@ -98,7 +98,6 @@ async function handleRequest(request, env) {
     url,
     cookie: request.headers.get('cookie') || '',
     ip: clientIp(request),
-    userAgent: request.headers.get('user-agent') || '',
     origin: url.origin,
     readText: () => request.text(),
   };

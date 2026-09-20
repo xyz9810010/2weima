@@ -91,7 +91,6 @@ function buildRequest(req, headers, url) {
     headers,
     cookie: headers.cookie || '',
     ip: util.clientIp(req, headers, TRUST_PROXY),
-    userAgent: headers['user-agent'] || '',
     origin,
     readText: () => util.readBody(req, BODY_LIMIT),
   };
