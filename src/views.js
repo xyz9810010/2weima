@@ -339,7 +339,19 @@ function callRow(record) {
 </li>`;
 }
 
-function adminPage({ mode = 'admin', account = null, cars, messages, users = [], baseUrl, universal, unread, notice }) {
+function adminPage({
+  mode = 'admin',
+  account = null,
+  cars,
+  messages,
+  users = [],
+  baseUrl,
+  universal,
+  unread,
+  notice,
+  emptyCount = 0,
+  cleanedCount = 0,
+}) {
   const isAdmin = mode === 'admin';
   const carSection = cars.length
     ? cars
@@ -444,6 +456,7 @@ function adminPage({ mode = 'admin', account = null, cars, messages, users = [],
   <section class="card">
     <h2 class="card-title">新增车辆</h2>
     ${carForm(null, '/cars', '生成挪车码')}
+    <p class="hint">至少要填「车牌」或一个号码 —— 什么都不填的记录建了也没用，会被拦下来。</p>
   </section>
 
   <section class="card">
@@ -456,6 +469,22 @@ function adminPage({ mode = 'admin', account = null, cars, messages, users = [],
       批量打印会把所有车的贴纸排在一页里一次打完。
       改车牌、改号码都不用重新打印。
     </p>
+    ${
+      isAdmin && emptyCount
+        ? `<div class="banner banner-error">
+      有 ${emptyCount} 辆车是空白的（车牌、号码全没有），扫码打开什么也做不了。
+      <form method="post" action="/admin/cleanup-empty" style="display:inline"
+            data-confirm="确定删除这 ${emptyCount} 辆空白车辆吗？">
+        <button class="btn btn-xs btn-danger" type="submit">清理这 ${emptyCount} 辆</button>
+      </form>
+    </div>`
+        : ''
+    }
+    ${
+      cleanedCount
+        ? `<p class="hint">刚才清理掉了 ${cleanedCount} 辆空白车辆。</p>`
+        : ''
+    }
     <div class="car-list">${carSection}</div>
   </section>
 
@@ -480,37 +509,57 @@ function adminPage({ mode = 'admin', account = null, cars, messages, users = [],
 /* ------------------------------------------------------------------ */
 
 /**
- * 贴纸。
+ * 贴纸。两种尺寸：
+ *   square = 50mm × 50mm 正方形（小巧，贴后视镜/角落）
+ *   rect   = 100mm × 50mm 长方形（二维码在左、文字在右，贴挡风玻璃正合适）
  *
  * 刻意**不印车牌、也不印编号**：
  *   - 车牌和号码都是扫码那一刻从数据库现查的，印上去只会变成过期信息
- *   - 编号是内部标识，贴在玻璃上对扫码人没有意义，没必要露出来
- * 所以贴纸只保留「让人扫码」这件事本身，外观上完全通用，
- * 换车、换牌、换号码都不用重印。哪张贴纸对应哪辆车，由后台的编号来对应。
+ *   - 编号是内部标识，贴在玻璃上对扫码人没有意义
+ * 所以贴纸只保留「让人扫码」这件事本身，外观完全通用，
+ * 换车、换牌、换号码都不用重印。
  */
-function sticker(car, { qrSvg, universal = false }) {
-  return `<div class="sticker">
-  <div class="sticker-head">
-    <div class="sticker-title">扫码挪车</div>
-    <div class="sticker-sub">临时停靠 · 请多包涵</div>
-  </div>
-  <div class="sticker-qr">${qrSvg}</div>
-  <div class="sticker-tip">车辆挡路请扫码联系车主</div>
-  ${universal ? '<div class="sticker-code">通用贴纸 · 可贴任意车辆</div>' : ''}
-</div>`;
+function sticker(car, { qrSvg, size = 'square' }) {
+  const head = `<div class="sticker-title">扫码挪车</div>
+    <div class="sticker-sub">临时停靠 · 请多包涵</div>`;
+
+  if (size === 'rect') {
+    return `<div class="sticker sticker-rect">
+    <div class="sticker-qr">${qrSvg}</div>
+    <div class="sticker-text">
+      ${head}
+      <div class="sticker-tip">车辆挡路请扫码<br>一键拨号联系车主</div>
+    </div>
+  </div>`;
+  }
+
+  return `<div class="sticker sticker-square">
+    ${head}
+    <div class="sticker-qr">${qrSvg}</div>
+    <div class="sticker-tip">车辆挡路请扫码联系车主</div>
+  </div>`;
 }
 
-function printPage(car, { baseUrl, qrSvg, universal = false }) {
+/** 打印页上的尺寸切换（两个链接，当前那个高亮） */
+function sizeSwitch(path, size) {
+  const link = (key, label) =>
+    `<a class="btn btn-xs ${size === key ? 'btn-primary' : 'btn-ghost'}" href="${esc(path)}?size=${key}">${label}</a>`;
+  return `<span class="size-switch">尺寸：${link('square', '5×5 方形')}${link('rect', '10×5 长方形')}</span>`;
+}
+
+function printPage(car, { baseUrl, qrSvg, universal = false, size = 'square', path = '' }) {
+  const label = size === 'rect' ? '10×5cm 长方形' : '5×5cm 正方形';
   return layout({
-    title: universal ? '挪车贴纸 · 通用' : '挪车贴纸',
+    title: universal ? `挪车贴纸 · 通用 · ${label}` : `挪车贴纸 · ${label}`,
     bodyClass: 'print-body',
     body: `<div class="print-toolbar">
   <a class="btn btn-sm btn-ghost" href="/admin">返回后台</a>
   <button class="btn btn-sm btn-primary" type="button" data-print>打印 / 另存为 PDF</button>
-  <span class="hint">建议用 A6 或更小尺寸、不干胶纸打印，贴在挡风玻璃内侧右上角。</span>
+  ${path ? sizeSwitch(path, size) : ''}
+  <span class="hint">${label}。建议用不干胶纸打印，贴在挡风玻璃内侧。</span>
 </div>
 
-${sticker(car, { qrSvg, universal })}
+${sticker(car, { qrSvg, size })}
 
 <p class="print-note">
   ${
@@ -525,12 +574,13 @@ ${sticker(car, { qrSvg, universal })}
 }
 
 /** 批量打印：把启用中的每辆车各出一张贴纸，排在一页里一次打完 */
-function printAllPage({ cars, baseUrl }) {
+function printAllPage({ cars, baseUrl, size = 'square', path = '/print-all' }) {
+  const label = size === 'rect' ? '10×5cm 长方形' : '5×5cm 正方形';
   const sheet = cars.length
     ? cars
         .map(
           (car) => `<div class="sticker-cell">
-        ${sticker(car, { qrSvg: car.qrSvg })}
+        ${sticker(car, { qrSvg: car.qrSvg, size })}
         <div class="sticker-url">${esc(car.plate || '未填写车牌')}</div>
       </div>`
         )
@@ -538,14 +588,15 @@ function printAllPage({ cars, baseUrl }) {
     : '<p class="muted">没有启用中的车辆。</p>';
 
   return layout({
-    title: '批量打印挪车贴纸',
+    title: `批量打印挪车贴纸 · ${label}`,
     bodyClass: 'print-body',
     body: `<div class="print-toolbar">
   <a class="btn btn-sm btn-ghost" href="/admin">返回后台</a>
   <button class="btn btn-sm btn-primary" type="button" data-print>打印 / 另存为 PDF</button>
+  ${sizeSwitch(path, size)}
   <span class="hint">
-    每辆车一张，共 ${cars.length} 张。虚线框外那行车牌只是给你对号用的，裁剪时剪掉。
-    贴纸本身外观完全一样，所以贴之前请对照这行车牌，别贴错车。
+    ${label}，每辆车一张，共 ${cars.length} 张。框外那行车牌只是给你对号用，裁剪时剪掉。
+    贴纸本身外观完全一样，贴之前请对照这行车牌，别贴错车。
   </span>
 </div>
 

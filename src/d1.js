@@ -115,6 +115,14 @@ function createStore(db) {
       return Boolean(result.meta && result.meta.changes);
     },
 
+    async deleteEmptyCars() {
+      const result = await run(
+        `DELETE FROM cars
+         WHERE COALESCE(plate, '') = '' AND COALESCE(phone, '') = '' AND COALESCE(call_number, '') = ''`
+      );
+      return result.meta ? Number(result.meta.changes) : 0;
+    },
+
     /* ------------------------------ 账号 ------------------------------ */
 
     async createUser(user) {

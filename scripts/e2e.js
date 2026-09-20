@@ -252,9 +252,34 @@ async function run() {
   {
     // 贴纸必须能随便挪到别的车上，所以本体上不能出现会过期的车牌，也不该露出内部编号
     const one = (await get(`/admin/cars/${code}/print`)).text;
-    const body = (one.split('<div class="sticker">')[1] || '').split('<p class="print-note">')[0];
+    const body = (one.split('<div class="sticker ')[1] || '').split('<p class="print-note">')[0];
     check('单张贴纸本体不印车牌（换车也不用重印）', !body.includes('沪A·88888'), body.slice(0, 200));
     check('单张贴纸本体不印编号', !body.includes(code), '编号露在贴纸上了');
+  }
+
+  // 两款尺寸：5×5cm 方形 / 10×5cm 长方形
+  {
+    const def = await get(`/admin/cars/${code}/print`);
+    check('默认尺寸是 5×5 方形', def.text.includes('class="sticker sticker-square"'), '默认不是方形');
+    check('打印页有两个尺寸切换入口', def.text.includes('?size=square') && def.text.includes('?size=rect'));
+
+    const square = await get(`/admin/cars/${code}/print?size=square`);
+    const rect = await get(`/admin/cars/${code}/print?size=rect`);
+    check('?size=square 出方形贴纸', square.text.includes('class="sticker sticker-square"'));
+    check('?size=rect 出长方形贴纸', rect.text.includes('class="sticker sticker-rect"'), '没有长方形');
+    check('长方形版二维码在左、文字在右', /sticker-rect">\s*<div class="sticker-qr">/.test(rect.text));
+
+    for (const [label, html] of [['方形', square.text], ['长方形', rect.text]]) {
+      const body = (html.split('<div class="sticker ')[1] || '').split('<p class="print-note">')[0];
+      check(`${label}贴纸有二维码`, body.includes('<svg'));
+      check(`${label}贴纸有「扫码挪车」`, body.includes('扫码挪车'));
+      check(`${label}贴纸不印车牌`, !body.includes('沪A·88888'));
+      check(`${label}贴纸不印编号`, !body.includes(code));
+    }
+
+    // 非法 / 未知尺寸一律回落到方形，不能白屏
+    const bogus = await get(`/admin/cars/${code}/print?size=big`);
+    check('未知尺寸回落到方形', bogus.status === 200 && bogus.text.includes('sticker-square'), bogus.status);
   }
   check('静态 /style.css = 200', (await get('/style.css')).status === 200);
   check('静态 /app.js = 200', (await get('/app.js')).status === 200);
@@ -409,11 +434,11 @@ async function run() {
 
     const printAll = await get('/admin/print-all');
     check('批量打印页 = 200', printAll.status === 200);
-    check('批量打印页正好两张贴纸', (printAll.text.match(/class="sticker"/g) || []).length === 2);
+    check('批量打印页正好两张贴纸', (printAll.text.match(/class="sticker sticker-/g) || []).length === 2);
     {
       // 只取贴纸本体：切到下面那行对号用的车牌小字之前
       const chunks = printAll.text
-        .split('<div class="sticker">')
+        .split('<div class="sticker ')
         .slice(1)
         .map((c) => c.split('<div class="sticker-url">')[0]);
       check(
@@ -429,6 +454,10 @@ async function run() {
       printAll.text.includes('浙A·77777') && printAll.text.includes('苏D·12345')
     );
     check('批量打印页不出现任何编号', !/编号/.test(printAll.text.split('<div class="sticker-sheet">')[0]), '标题区出现了编号');
+    check('批量打印默认方形', (printAll.text.match(/sticker-square/g) || []).length === 2);
+
+    const printAllRect = await get('/print-all?size=rect');
+    check('批量打印可切长方形', (printAllRect.text.match(/sticker-rect/g) || []).length === 2, '长方形批量失败');
 
     const uniPrint = await get('/admin/print-universal');
     check('通用贴纸打印页 = 200', uniPrint.status === 200 && uniPrint.text.includes('通用贴纸'));
@@ -540,7 +569,43 @@ async function run() {
     }
   }
 
-  section('10. 会话与越权');
+  section('11. 空记录防护（后台不该被空白车辆堆满）');
+  {
+    const carCount = (html) => Number((html.match(/车辆与贴纸（(\d+)）/) || [])[1] || -1);
+    const before = await get('/admin');
+    const baseCount = carCount(before.text);
+    check('起始车辆数可读', baseCount >= 0, baseCount);
+
+    // 空表单不该建出记录 —— 线上就是被这个坑过：11 辆全空的车，通用码还会把它们列给扫码人
+    const empty = await post('/cars', { plate: '', owner_name: '', phone: '', call_number: '', note: '', enabled: 'on' });
+    check('空表单建车被拦下', empty.status === 302 && empty.location.includes('notice=needinfo'), empty.location);
+    check('后台车辆数没有增加', carCount((await get('/admin')).text) === baseCount, '还是建出来了');
+    check('后台会说明为什么没建成', (await get('/admin?notice=needinfo')).text.includes('没建成'));
+
+    // 只填一个号码也算有内容
+    const onlyNumber = await post('/cars', { plate: '', owner_name: '', phone: '', call_number: '400-111-2222', note: '', enabled: 'on' });
+    check('只填拨号号码可以建', onlyNumber.location.includes('notice=created'), onlyNumber.location);
+    const list = await get('/admin');
+    check('车辆数 +1', carCount(list.text) === baseCount + 1, carCount(list.text));
+    const code = [...new Set((list.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)))].pop();
+    check('拿到编号 ' + code, Boolean(code), code);
+
+    if (code) {
+      // 改成全空也要被拦
+      const cleared = await post(`/cars/${code}`, { plate: '', owner_name: '', phone: '', call_number: '', note: '', enabled: 'on' });
+      check('把车改成全空被拦下', cleared.location.includes('notice=needinfo'), cleared.location);
+      check('号码没被清掉', (await get('/admin')).text.includes('4001112222'), '号码被清空了');
+
+      // 平台方的「清理空白车辆」按钮
+      await post(`/cars/${code}/delete`);
+      check('清掉测试车', carCount((await get('/admin')).text) === baseCount);
+    }
+
+    const cleaned = await post('/admin/cleanup-empty');
+    check('平台方可以一键清理空白车辆', cleaned.location.includes('notice=cleaned'), cleaned.location);
+  }
+
+  section('12. 会话与越权');
   check('登出 = 302', (await post('/logout')).location === '/login');
   check('登出后后台跳登录页', (await get('/admin')).location === '/login');
   const anon = await post('/cars', { plate: '伪造' }, { auth: false });

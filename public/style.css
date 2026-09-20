@@ -635,36 +635,99 @@ textarea:focus {
   padding: 16px;
 }
 
+/* ---------- 贴纸：两种尺寸（5×5cm 正方形 / 10×5cm 长方形） ---------- */
+
 .sticker {
-  width: 105mm;
-  margin: 8px auto 40px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: #fff;
   color: #000;
-  border: 2px solid #000;
-  border-radius: 6mm;
-  padding: 6mm;
-  text-align: center;
+  border: 1.5px solid #000;
+  border-radius: 3mm;
   font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* 浏览器默认会为省墨丢掉背景，贴纸要按原样打出来 */
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
 }
 
-.sticker-title {
-  font-size: 30pt;
+/* 正方形 50mm × 50mm */
+.sticker-square {
+  width: 50mm;
+  height: 50mm;
+  padding: 2mm;
+  flex-direction: column;
+  text-align: center;
+}
+
+.sticker-square .sticker-title {
+  font-size: 9pt;
   font-weight: 800;
-  letter-spacing: 4px;
+  letter-spacing: 1px;
   line-height: 1.15;
 }
 
-.sticker-sub {
-  font-size: 10pt;
-  letter-spacing: 3px;
-  margin-top: 1mm;
+.sticker-square .sticker-sub {
+  font-size: 5.5pt;
+  letter-spacing: 0.5px;
+  color: #333;
+  margin-top: 0.4mm;
+}
+
+.sticker-square .sticker-qr {
+  width: 32mm;
+  height: 32mm;
+  margin: 1.2mm 0;
+}
+
+.sticker-square .sticker-tip {
+  font-size: 5.5pt;
+  line-height: 1.25;
+}
+
+/* 长方形 100mm × 50mm：二维码在左，文字在右 */
+.sticker-rect {
+  width: 100mm;
+  height: 50mm;
+  padding: 3mm;
+  flex-direction: row;
+  gap: 4mm;
+  text-align: left;
+}
+
+.sticker-rect .sticker-qr {
+  width: 40mm;
+  height: 40mm;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.sticker-rect .sticker-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.6mm;
+  min-width: 0;
+}
+
+.sticker-rect .sticker-title {
+  font-size: 15pt;
+  font-weight: 800;
+  letter-spacing: 2px;
+  line-height: 1.1;
+}
+
+.sticker-rect .sticker-sub {
+  font-size: 7pt;
+  letter-spacing: 0.5px;
   color: #333;
 }
 
-.sticker-qr {
-  margin: 4mm auto 3mm;
-  width: 62mm;
-  height: 62mm;
+.sticker-rect .sticker-tip {
+  font-size: 7pt;
+  line-height: 1.45;
+  color: #222;
 }
 
 .sticker-qr svg {
@@ -673,16 +736,14 @@ textarea:focus {
   display: block;
 }
 
-.sticker-tip {
-  font-size: 10pt;
-  line-height: 1.6;
-  margin-top: 1mm;
-}
+/* 打印页上的尺寸切换 */
 
-.sticker-code {
-  font-size: 9pt;
-  color: #444;
-  margin-top: 2mm;
+.size-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #4b5563;
 }
 
 /* 车辆卡片里那句「编号和二维码是永久的」 */
@@ -875,12 +936,14 @@ textarea:focus {
     border-width: 1px;
     box-shadow: none;
     page-break-inside: avoid;
+    break-inside: avoid;
   }
 
   .sticker-sheet {
     display: block;
     max-width: none;
     padding: 0;
+    gap: 0;
   }
 
   .sticker-cell {
@@ -889,7 +952,9 @@ textarea:focus {
     margin: 0 4mm 4mm 0;
   }
 
+  /* 贴纸按实际毫米尺寸打印，@page 只留机器不可打印的窄边 */
   @page {
-    margin: 8mm;
+    size: auto;
+    margin: 6mm;
   }
 }

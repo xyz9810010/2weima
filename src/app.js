@@ -41,7 +41,17 @@ const NOTICES = {
   created: { text: '已生成挪车码，下面可以直接下载或打印贴纸。', kind: 'info' },
   updated: { text: '已保存修改。', kind: 'info' },
   deleted: { text: '已删除该车辆及其拨号记录。', kind: 'info' },
+  needinfo: {
+    text: '没建成：至少要填「车牌」或一个号码。一条什么都不填的记录，贴纸扫开什么也做不了。',
+    kind: 'error',
+  },
+  cleaned: { text: '已清理掉空白车辆。', kind: 'info' },
 };
+
+/** 一条车辆记录有没有意义：车牌、真实号、拨号码总得有一个 */
+function carHasIdentity(fields) {
+  return Boolean(fields.plate || fields.call_number || fields.phone);
+}
 
 /* ---------------------------- 响应构造 ---------------------------- */
 
@@ -117,6 +127,11 @@ function createApp(options) {
   const universalUrl = (base) => `${base}/`;
 
   const baseUrlOf = (req) => publicBaseUrl || req.origin;
+
+  /** 贴纸尺寸：square = 5×5cm 方形（默认），rect = 10×5cm 长方形 */
+  function stickerSize(url) {
+    return url && url.searchParams.get('size') === 'rect' ? 'rect' : 'square';
+  }
 
   /* ----------------------------- 会话 ----------------------------- */
 
@@ -520,6 +535,10 @@ function createApp(options) {
           : null,
         unread: isAdmin ? await store.countUnread() : await store.countUnreadByOwner(session.userId),
         notice: noticeKey && NOTICES[noticeKey] ? NOTICES[noticeKey] : null,
+        cleanedCount: Number(url.searchParams.get('n')) || 0,
+        emptyCount: isAdmin
+          ? cars.filter((car) => !car.plate && !car.phone && !car.call_number).length
+          : 0,
       })
     );
   }
@@ -561,6 +580,10 @@ function createApp(options) {
     const session = await currentSession(req);
     if (!session) return redirectResponse('/login');
     const fields = collectCarFields(core.parseForm(await req.readText()));
+
+    // 空表单不建记录：否则后台很快堆满「未填写车牌」，通用码还会把它们列给扫码人看
+    if (!carHasIdentity(fields)) return redirectResponse(`${homeFor(session)}?notice=needinfo`);
+
     await store.createCar(
       Object.assign(
         {
@@ -579,8 +602,18 @@ function createApp(options) {
     const found = await loadCarFor(session, params[0]);
     if (found.error) return found.error;
     const fields = collectCarFields(core.parseForm(await req.readText()));
+    if (!carHasIdentity(fields)) return redirectResponse(`${homeFor(session)}?notice=needinfo`);
     await store.updateCar(found.car.id, fields);
     return redirectResponse(`${homeFor(session)}?notice=updated`);
+  }
+
+  /** 平台方专用：一次清掉所有空白车辆（车牌、号码全没有的） */
+  async function handleCleanupEmpty(req) {
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
+    if (session.kind !== 'admin') return redirectResponse('/me');
+    const removed = await store.deleteEmptyCars();
+    return redirectResponse(`/admin?notice=cleaned&n=${removed}`);
   }
 
   async function handleDeleteCar(req, url, params) {
@@ -616,7 +649,7 @@ function createApp(options) {
   }
 
   /** 通用贴纸的打印页：一种设计，贴在任一车上 */
-  async function handleUniversalPrint(req) {
+  async function handleUniversalPrint(req, url) {
     const session = await currentSession(req);
     if (!session || session.kind !== 'admin') return redirectResponse('/login');
     const base = baseUrlOf(req);
@@ -624,13 +657,19 @@ function createApp(options) {
       200,
       views.printPage(
         { id: '', plate: '', placeholder: true },
-        { baseUrl: base, qrSvg: qrSvgForContent(universalUrl(base)), universal: true }
+        {
+          baseUrl: base,
+          qrSvg: qrSvgForContent(universalUrl(base)),
+          universal: true,
+          size: stickerSize(url),
+          path: '/admin/print-universal',
+        }
       )
     );
   }
 
   /** 批量打印：每辆车一张贴纸，排在一页里一次打完（车主只打自己的） */
-  async function handlePrintAll(req) {
+  async function handlePrintAll(req, url) {
     const session = await currentSession(req);
     if (!session) return redirectResponse('/login');
     const base = baseUrlOf(req);
@@ -644,7 +683,10 @@ function createApp(options) {
         qrSvg: qrSvgForContent(carUrl(car, base)),
         scanUrl: carUrl(car, base),
       }));
-    return htmlResponse(200, views.printAllPage({ cars, baseUrl: base }));
+    return htmlResponse(
+      200,
+      views.printAllPage({ cars, baseUrl: base, size: stickerSize(url), path: '/print-all' })
+    );
   }
 
   async function handleQrSvg(req, url, params) {
@@ -676,7 +718,12 @@ function createApp(options) {
     const base = baseUrlOf(req);
     return htmlResponse(
       200,
-      views.printPage(car, { baseUrl: base, qrSvg: qrSvgForContent(carUrl(car, base)) })
+      views.printPage(car, {
+        baseUrl: base,
+        qrSvg: qrSvgForContent(carUrl(car, base)),
+        size: stickerSize(url),
+        path: `/cars/${car.id}/print`,
+      })
     );
   }
 
@@ -726,6 +773,7 @@ function createApp(options) {
     ['GET', /^\/me$/, handleMyCars],
     // 平台方：看全部
     ['GET', /^\/admin$/, handleAdminHome],
+    ['POST', /^\/admin\/cleanup-empty$/, handleCleanupEmpty],
     ['GET', /^\/admin\/universal\.svg$/, handleUniversalQrSvg],
     ['GET', /^\/admin\/print-universal$/, handleUniversalPrint],
 

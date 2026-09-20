@@ -57,6 +57,10 @@ function createStore(dataDir) {
     `),
     setCarOwner: db.prepare('UPDATE cars SET owner_id = ?, updated_at = ? WHERE id = ?'),
     deleteCar: db.prepare('DELETE FROM cars WHERE id = ?'),
+    deleteEmptyCars: db.prepare(`
+      DELETE FROM cars
+      WHERE COALESCE(plate, '') = '' AND COALESCE(phone, '') = '' AND COALESCE(call_number, '') = ''
+    `),
 
     insertUser: db.prepare(`
       INSERT INTO users (id, contact, name, password_hash, role, disabled, created_at)
@@ -195,6 +199,10 @@ function createStore(dataDir) {
 
     async deleteCar(id) {
       return stmt.deleteCar.run(String(id)).changes > 0;
+    },
+
+    async deleteEmptyCars() {
+      return stmt.deleteEmptyCars.run().changes;
     },
 
     /* ------------------------------ 账号 ------------------------------ */
