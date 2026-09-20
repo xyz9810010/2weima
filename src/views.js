@@ -2,6 +2,11 @@
 
 const { esc, fmtTime } = require('./core');
 
+/* 图标一律内联 SVG：字体符号（☎）在不同系统里长得不一样，也没法跟随文字颜色和粗细 */
+const ICON_PHONE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
+
+const ICON_WARN = `<svg class="warn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+
 function layout({ title, body, bodyClass = '' }) {
   return `<!doctype html>
 <html lang="zh-CN">
@@ -21,7 +26,9 @@ ${body}
 }
 
 function banner(text, kind = 'error') {
-  return `<div class="banner banner-${esc(kind)}">${esc(text)}</div>`;
+  // 错误要立刻被屏幕阅读器读出来，而不是等用户自己逛到那一行
+  const role = kind === 'error' ? ' role="alert"' : '';
+  return `<div class="banner banner-${esc(kind)}"${role}>${esc(text)}</div>`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -34,8 +41,9 @@ function scanPage(car, { dialNumber }) {
 
   const callBlock = dialNumber
     ? `<a class="btn btn-call btn-block" href="tel:${esc(dialNumber)}"
-          data-call-log="/c/${esc(car.id)}/call">
-         <span class="btn-icon">&#9742;</span> 一键拨号
+          data-call-log="/c/${esc(car.id)}/call" aria-label="拨打车主电话">
+         <span class="btn-icon" aria-hidden="true">${ICON_PHONE}</span>
+         <span>一键拨号</span>
        </a>
        <p class="hint center">点击后手机将拨打车主留下的联系电话。</p>`
     : `<div class="notice">车主还没有留下联系电话，暂时无法拨号。</div>`;
@@ -44,6 +52,7 @@ function scanPage(car, { dialNumber }) {
     title: `挪车提醒 · ${plate}`,
     body: `<main class="wrap wrap-scan">
   <div class="hero">
+    <div class="hero-label">挡路的车辆</div>
     <div class="hero-plate">${esc(plate)}</div>
     <div class="hero-title">这是一辆临时停放的车辆</div>
   </div>
@@ -52,7 +61,7 @@ function scanPage(car, { dialNumber }) {
     <p class="note-text">${esc(note)}</p>
   </section>
 
-  <section class="card">
+  <section class="card action-card">
     ${callBlock}
   </section>
 
@@ -292,7 +301,7 @@ function carCard(car, { baseUrl, qrSvg, ownerLabel }) {
             ? `拨号号码：${esc(car.call_number)}`
             : car.phone
               ? `未填拨号号码，扫码页将拨打真实手机号 ${esc(car.phone)}`
-              : '<b>⚠️ 两个号码都没填：这张贴纸扫了不会有拨号按钮</b>'
+              : `<span class="warn-text">${ICON_WARN}两个号码都没填：这张贴纸扫了不会有拨号按钮</span>`
         }
       </p>
     </div>

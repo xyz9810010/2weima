@@ -240,6 +240,21 @@ scripts/         start.js（Node 启动）、selftest.js（编码器自检）、
 
 Node 的 `node:sqlite` 其实是同步的，这里刻意包成 async —— 为了和 D1 对齐，代价是零。
 
+### 界面约定（改动前先看这几条）
+
+- **不引 Google Fonts**：用系统字体栈（`system-ui` / PingFang SC / 微软雅黑）。
+  大陆访问不到 Google Fonts，引了会拖慢首屏，甚至字体一直不加载。
+- **图标一律内联 SVG，不用 emoji 或字体符号**：`☎` 这类字形在不同系统里长得完全不一样，
+  也没法跟随文字颜色和粗细。装饰性图标要 `aria-hidden="true"`。
+- **颜色只走 `:root` 里的语义变量**，深色模式单独给一套取值，不在组件里写死 hex。
+- **间距用 `--sp-*`**（4 的倍数），别随手写 13px / 18px。
+- **触控**：`touch-action: manipulation` 去掉移动端 300ms 点击延迟；
+  可点区域不小于 `--tap-min`（44px）；扫码页底部留 `safe-area-inset`。
+- **键盘焦点必须可见**（`:focus-visible`），错误提示带 `role="alert"`，
+  并且尊重系统的 `prefers-reduced-motion`。
+
+这几条在 `npm run e2e` 里有对应的断言，改坏了会被拦下来。
+
 ---
 
 ## 五、隐私设计

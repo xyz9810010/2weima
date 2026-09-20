@@ -605,7 +605,44 @@ async function run() {
     check('平台方可以一键清理空白车辆', cleaned.location.includes('notice=cleaned'), cleaned.location);
   }
 
-  section('12. 会话与越权');
+  section('12. UI/UX 基础（可访问性 / 触控 / 图标）');
+  {
+    const css = (await get('/style.css')).text;
+    check('键盘焦点可见（:focus-visible）', css.includes(':focus-visible'));
+    check('尊重系统「减少动态效果」', css.includes('prefers-reduced-motion'));
+    check('去掉移动端 300ms 点击延迟', css.includes('touch-action: manipulation'));
+    check('适配 iPhone 安全区', css.includes('safe-area-inset'));
+    check('深色模式有独立取值', css.includes('prefers-color-scheme: dark'));
+    check('触摸目标有统一下限', css.includes('--tap-min'));
+    check('间距用统一的节奏变量', css.includes('--sp-1') && css.includes('--sp-4'));
+
+    // 前面几节把车都删光了，这里临时建一辆来看扫码页
+    const before = await get('/admin');
+    const known = new Set((before.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)));
+    await post('/cars', { plate: 'UI检查·0001', phone: '13800138000', call_number: '', note: '', enabled: 'on' });
+    const withCar = await get('/admin');
+    const uiCode = [...new Set((withCar.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)))]
+      .find((c) => !known.has(c));
+
+    const scan = await get(`/c/${uiCode}`);
+    check('临时车扫码页 = 200', scan.status === 200, scan.status);
+    check('拨号按钮用内联 SVG 图标', scan.text.includes('btn-icon') && scan.text.includes('<svg'));
+    check('不再用字体符号当图标（☎）', !scan.text.includes('&#9742;'), '还在用 ☎');
+    check('拨号按钮有可读名称', scan.text.includes('aria-label="拨打车主电话"'));
+    check('装饰性图标对屏幕阅读器隐藏', scan.text.includes('aria-hidden="true"'));
+    check('扫码页标出「挡路的车辆」', scan.text.includes('挡路的车辆'));
+    await post(`/cars/${uiCode}/delete`);
+
+    const badSignup = await post('/signup', { contact: '不是手机号', password: 'password123' });
+    check('错误提示会主动播报（role=alert）', badSignup.text.includes('role="alert"'), '没有 role=alert');
+    check('页面声明了中文语言', badSignup.text.includes('lang="zh-CN"'));
+    check('移动端视口含 viewport-fit=cover', badSignup.text.includes('viewport-fit=cover'));
+
+    const adminRow = await get('/admin');
+    check('后台不再用 emoji 当警告图标', !adminRow.text.includes('⚠'), '还有 ⚠️');
+  }
+
+  section('13. 会话与越权');
   check('登出 = 302', (await post('/logout')).location === '/login');
   check('登出后后台跳登录页', (await get('/admin')).location === '/login');
   const anon = await post('/cars', { plate: '伪造' }, { auth: false });
