@@ -1,7 +1,7 @@
 'use strict';
 
 const core = require('./core');
-const { esc, fmtTime } = core;
+const { esc, fmtTime, fmtShortTime } = core;
 
 /* 图标一律内联 SVG：字体符号（☎）在不同系统里长得不一样，也没法跟随文字颜色和粗细 */
 const ICON_PHONE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
@@ -338,8 +338,7 @@ function carCard(car, { baseUrl, qrSvg, ownerLabel }) {
         ${ownerLabel ? `<span class="dot">·</span>${esc(ownerLabel)}` : ''}
       </div>
       <div class="car-perm">
-        <b>编号和二维码是永久的</b>：换车牌、换号码、换到另一辆车上，
-        都只改下面这条记录，贴纸不用重印。
+        <b>编号和二维码是永久的</b>：换车牌、换号码都不用重印贴纸。
       </div>
     </div>
     <span class="badge ${car.enabled ? 'badge-on' : 'badge-off'}">${car.enabled ? '启用中' : '已停用'}</span>
@@ -372,11 +371,14 @@ function carCard(car, { baseUrl, qrSvg, ownerLabel }) {
       <button class="btn btn-xs btn-ghost" type="button" data-copy="${esc(car.editUrl)}">复制</button>
     </div>
     <code class="edit-link">${esc(car.editUrl)}</code>
-    <p class="hint">
-      把这条链接发给开这辆车的人，对方就能自己改车牌和号码 ——
-      只能改这一辆，看不到你其他车，也拿不到后台密码。
-      <b>转发这条链接 = 交出这一辆车的修改权</b>，请只发给你信任的人。
-    </p>
+    <details class="card-help">
+      <summary>这条链接是干什么的？</summary>
+      <p class="hint">
+        把这条链接发给开这辆车的人，对方就能自己改车牌和号码 ——
+        只能改这一辆，看不到你其他车，也拿不到后台密码。
+        <b>转发这条链接 = 交出这一辆车的修改权</b>，请只发给你信任的人。
+      </p>
+    </details>
   </div>
 
   <details class="car-edit" data-car-id="${esc(car.id)}">
@@ -392,18 +394,21 @@ function carCard(car, { baseUrl, qrSvg, ownerLabel }) {
 
 function callRow(record) {
   const unread = !record.read_at;
+  // 一行一条：车牌 · 时间 · 状态。
+  // 以前每条都重复「有人点了一次拨号」「只记录次数与时间，不记录任何扫码人信息」——
+  // 三行字里两行是噪音，20 条记录就是 60 行。这两句话现在只写在卡片标题下面一次。
+  //
+  // 时间不带年份：记录都是近期活动，年份只是占地方 ——
+  // 实测 375px 手机上，带年份的「2026-09-21 02:19」加上按钮要 340px，一行只有 309px，必折行。
   return `<li class="msg ${unread ? 'msg-unread' : ''}">
-  <div class="msg-head">
-    <span class="badge badge-call">拨号</span>
-    <span class="msg-plate">${esc(record.plate || record.car_id)}</span>
-    <span class="msg-time">${esc(fmtTime(record.created_at))}</span>
-    ${unread ? '<span class="badge badge-new">未读</span>' : ''}
-  </div>
-  <div class="msg-content">有人点了一次「一键拨号」</div>
-  <div class="msg-foot">
-    <span class="muted">只记录次数与时间，不记录任何扫码人信息</span>
-    ${unread ? `<form method="post" action="/messages/${esc(record.id)}/read" data-remote><button class="btn btn-xs btn-ghost" type="submit">标记已读</button></form>` : ''}
-  </div>
+  <span class="msg-plate">${esc(record.plate || record.car_id)}</span>
+  <span class="msg-time">${esc(fmtShortTime(record.created_at))}</span>
+  ${unread ? '<span class="badge badge-new">未读</span>' : ''}
+  ${
+    unread
+      ? `<form method="post" action="/messages/${esc(record.id)}/read" data-remote><button class="btn btn-xs btn-ghost" type="submit">标记已读</button></form>`
+      : ''
+  }
 </li>`;
 }
 
@@ -440,10 +445,21 @@ function emptyWarnHtml(emptyCount) {
     </div>`;
 }
 
-function recordListHtml(messages) {
-  return messages.length
-    ? `<ul class="msg-list">${messages.map(callRow).join('\n')}</ul>`
-    : '<p class="muted">还没有人拨号。</p>';
+/**
+ * 拨号记录列表。
+ * 记录只增不减，全铺出来会把整页撑到十几屏（实测 20 条就占 5.4 屏），
+ * 所以默认只铺最近 10 条，更早的收进一个 <details> —— 不用 JS，禁用 JS 也能展开。
+ */
+function recordListHtml(messages, { limit = 10 } = {}) {
+  if (!messages.length) return '<p class="muted">还没有人拨号。</p>';
+  const list = (rows) => `<ul class="msg-list">${rows.map(callRow).join('\n')}</ul>`;
+  const older = messages.slice(limit);
+  return (
+    list(messages.slice(0, limit)) +
+    (older.length
+      ? `<details class="more-records"><summary>还有 ${older.length} 条更早的记录</summary>${list(older)}</details>`
+      : '')
+  );
 }
 
 function recordActionsHtml(unread) {
@@ -517,9 +533,12 @@ function adminPage({
           <a class="btn btn-sm btn-ghost" href="/" target="_blank" rel="noreferrer">预览</a>
         </div>
         <p class="hint">${universalHint}</p>
-        <p class="hint">
-          它只认 <b>owner_id 为空</b>的自有车，不会影响车主的车。车主想让扫码直接对上车辆，用自己的专属码。
-        </p>
+        <details class="card-help">
+          <summary>这个码认哪些车？</summary>
+          <p class="hint">
+            它只认 <b>owner_id 为空</b>的自有车，不会影响车主的车。车主想让扫码直接对上车辆，用自己的专属码。
+          </p>
+        </details>
       </div>
     </div>
   </section>`;
@@ -541,9 +560,8 @@ function adminPage({
     isAdmin
       ? `<section class="card">
     <h2 class="card-title">平台控制台</h2>
-    <p class="muted">你是平台管理员：这里的「新增车辆」建出来的是<b>平台自有车</b>（owner_id 为空），
-      在车主账号里看不到；通用码也只认这些车。</p>
-    <p class="hint">车主各自注册账号后，在「我的车辆」里自己建车、自己打印贴纸。</p>
+    <p class="hint">你是平台管理员：这里「新增车辆」建出来的是<b>平台自有车</b>（owner_id 为空），
+      车主账号里看不到，通用码也只认这些车。车主各自注册账号后，在「我的车辆」里自己建车、自己打印贴纸。</p>
   </section>`
       : `<section class="card card-account">
     <h2 class="card-title">我的账号</h2>
@@ -565,11 +583,14 @@ function adminPage({
         ${cars.length ? `<a class="btn btn-sm btn-primary" href="/print-all" target="_blank" rel="noreferrer">批量打印全部贴纸</a>` : ''}
       </div>
     </div>
-    <p class="hint">
-      <b>一车一码</b>：每辆车有自己的码，扫码直接进那一辆，扫码人不用选。
-      批量打印会把所有车的贴纸排在一页里一次打完。
-      改车牌、改号码都不用重新打印。
-    </p>
+    <p class="hint"><b>一车一码</b>：每辆车有自己的码，扫码直接进那一辆，扫码人不用选。</p>
+    <details class="card-help">
+      <summary>贴纸怎么用？</summary>
+      <p class="hint">
+        批量打印会把所有车的贴纸排在一页里一次打完。改车牌、改号码都不用重新打印；
+        贴纸外观完全通用，撕下来可以贴到别的车上，贴之前对照框外的车牌别贴错车。
+      </p>
+    </details>
     <div id="empty-warn">${emptyWarnHtml(isAdmin ? emptyCount : 0)}</div>
     ${cleanedCount ? `<p class="hint">刚才清理掉了 ${cleanedCount} 辆空白车辆。</p>` : ''}
     <div class="car-list" id="car-list">${carListHtml(cars, { baseUrl, isAdmin })}</div>

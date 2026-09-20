@@ -180,7 +180,12 @@ async function run() {
   check('拨号打点 = 200 {ok:true}', call.status === 200 && call.text.includes('"ok":true'));
 
   const admin2 = await get('/admin');
-  check('后台看到拨号记录', admin2.text.includes('有人点了一次「一键拨号」'));
+  // 记录现在是一行一条（车牌 · 时间 · 状态），不再每条都重复那两句说明文字
+  check(
+    '后台看到拨号记录（车牌 + 时间那一行）',
+    /<li class="msg[^"]*">\s*<span class="msg-plate">/.test(admin2.text) && admin2.text.includes('拨号记录'),
+    '没看到记录行'
+  );
   check('后台能看到车主填的号码（仅车主侧）', admin2.text.includes(REAL_PHONE));
 
   // 只针对「拨号记录」这块列表断言（页面别处会合法地出现 baseUrl 里的主机名）
@@ -889,7 +894,44 @@ async function run() {
     }
   }
 
-  section('16. 会话与越权');
+  section('16. 布局：长列表和长说明不能把页面撑爆');
+  {
+    // 记录是只增不减的：以前 20 条就把后台撑到 5.4 屏，这里造出 >10 条来验证封顶
+    const before = await get('/admin');
+    const known = new Set((before.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)));
+    await post('/cars', {
+      plate_province: '沪', plate_city: 'C', plate_rest: '12121',
+      owner_name: '', phone: '', call_number: '13800138001', note: '', enabled: 'on',
+    });
+    const withCar = await get('/admin');
+    const layoutCode = [...new Set((withCar.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)))]
+      .find((c) => !known.has(c));
+    check('建了一辆用于布局测试的车 ' + layoutCode, Boolean(layoutCode));
+
+    if (layoutCode) {
+      for (let i = 0; i < 12; i++) await post(`/c/${layoutCode}/call`);
+
+      const page = await get('/admin');
+      const records = page.text.split('id="record-area"')[1] || '';
+      const [visiblePart, detailsPart = ''] = records.split('<details');
+      const visible = (visiblePart.match(/<li class="msg/g) || []).length;
+      const older = (detailsPart.match(/<li class="msg/g) || []).length;
+
+      check('拨号记录默认只铺最近 10 条', visible === 10, `铺了 ${visible} 条`);
+      check('更早的记录收进折叠区，条数对得上', older > 0 && records.includes(`还有 ${older} 条更早的记录`));
+      check('记录是一行一条，不再每条重复那两句说明', !records.includes('有人点了一次'), '还在重复');
+      check('隐私说明全页只写一次', (page.text.match(/不记录扫码人的 IP/g) || []).length === 1, '说明重复了');
+      check(
+        '详细说明收进可折叠区，默认不是文字墙',
+        (page.text.match(/<details class="card-help">/g) || []).length >= 3,
+        '说明还摊在页面上'
+      );
+
+      await post(`/cars/${layoutCode}/delete`);
+    }
+  }
+
+  section('17. 会话与越权');
   check('登出 = 302', (await post('/logout')).location === '/login');
   check('登出后后台跳登录页', (await get('/admin')).location === '/login');
   const anon = await post('/cars', { plate: '伪造' }, { auth: false });

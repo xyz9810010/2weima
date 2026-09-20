@@ -604,9 +604,18 @@ textarea:focus {
 }
 
 .car-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 16px;
+}
+
+/* 桌面端：车卡横向铺开，一屏能看好几辆，不用一辆一辆往下滚。
+   用 auto-fit 而不是 auto-fill —— 空轨道会塌缩，所以只有一辆车时它铺满整行，
+   两辆以上才分成两栏（auto-fill 会让单车用户对着一张半宽卡片和半边空白）。 */
+@media (min-width: 900px) {
+  .car-list {
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  }
 }
 
 .car {
@@ -743,7 +752,7 @@ textarea:focus {
   text-align: center;
 }
 
-/* ------------------------------ 留言 ------------------------------ */
+/* ------------------------------ 拨号记录 -------------------------- */
 
 .msg-list {
   list-style: none;
@@ -751,26 +760,26 @@ textarea:focus {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
+/* 一行一条记录：车牌 · 时间 · 状态。
+   记录以前是三条文字（车牌时间 / 「有人点了一次拨号」/ 「不记录任何信息」），
+   20 条就把这一屏撑成 5.4 屏；现在四行字并成一行，列表再长也只是多几行。 */
 .msg {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 12px 14px;
+  border-radius: 10px;
+  padding: 6px 10px;
   background: var(--bg);
+  font-size: 13px;
 }
 
 .msg-unread {
   border-color: var(--primary);
-}
-
-.msg-head {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 13px;
 }
 
 .msg-plate {
@@ -780,32 +789,67 @@ textarea:focus {
 .msg-time {
   color: var(--muted);
   margin-left: auto;
-}
-
-.msg-reason {
-  margin-top: 8px;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.msg-content {
-  margin-top: 4px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.msg-foot {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 10px;
   font-size: 12px;
-  color: var(--muted);
+  /* 等宽数字：时间在列表里能对齐成一列 */
+  font-variant-numeric: tabular-nums;
 }
 
-.msg-foot form {
-  margin-left: auto;
+.msg form {
+  margin: 0;
+}
+
+/* 「标记已读」按钮：手机上是 44px 高的触控目标（保留），但宽度不能再从 44px 起步 ——
+   375px 一行只有 300 多 px，按默认内边距这一行必折行。 */
+.msg form .btn {
+  padding-left: 12px;
+  padding-right: 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* 记录只增不减，默认只铺最近 10 条，更早的收起来 */
+.more-records {
+  margin-top: 8px;
+}
+
+.more-records > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 6px 2px;
+}
+
+.more-records > summary:hover {
+  color: var(--primary);
+}
+
+.more-records[open] > summary {
+  margin-bottom: 8px;
+}
+
+/* 卡片里「可折叠的说明」：默认只留一句关键的，详细解释点开才看 */
+.card-help {
+  margin: 8px 0 0;
+}
+
+.card-help > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 6px 2px;
+  list-style-position: inside;
+}
+
+.card-help > summary:hover {
+  color: var(--primary);
+}
+
+.card-help[open] > summary {
+  margin-bottom: 4px;
+}
+
+.card-help .hint {
+  margin: 0;
 }
 
 /* ------------------------------ 提示条 ---------------------------- */
@@ -1319,6 +1363,23 @@ textarea:focus {
     font-size: 30px;
     padding: 10px 20px;
     letter-spacing: 2px;
+  }
+
+  /* 车卡里的三个按钮排两列：原来三行、现在两行，省一截高度 */
+  .car-actions .btn-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .car-actions .btn-row > .btn {
+    width: 100%;
+  }
+
+  /* 折叠开关（说明、更早的记录）在手机上也要够手指点 */
+  .card-help > summary,
+  .more-records > summary {
+    padding-top: 12px;
+    padding-bottom: 12px;
   }
 }
 

@@ -61,6 +61,17 @@ function fmtTime(ms) {
 }
 
 /**
+ * 省略年份的时间：`09-21 02:19`。
+ * 拨号记录都是近期活动，年份既占宽度又没人看 —— 375px 手机上带着年份会把这行挤到折行。
+ */
+function fmtShortTime(ms) {
+  if (!ms) return '';
+  const d = new Date(Number(ms) + tzOffsetHours * 3600 * 1000);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
+/**
  * application/x-www-form-urlencoded → 普通对象
  *
  * 刻意**只支持 urlencoded**（Node 与 Workers 共用，不想两边各写一个 multipart 解析器）。
@@ -344,6 +355,7 @@ module.exports = {
   normalizeBaseUrl,
   sanitizePhone,
   fmtTime,
+  fmtShortTime,
   parseForm,
   parseCookies,
   randomCode,
