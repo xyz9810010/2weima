@@ -122,11 +122,14 @@ function createApp(options) {
   /** 每辆车自己的码 */
   const carUrl = (car, base) => `${base}/c/${car.id}`;
   /**
-   * 通用码：域名根路径，不带任何编号。
-   * 因为 QR 只是一个网址，同一个码无法区分是哪辆车 —— 扫码页再让扫码人选。
-   * 好处是贴纸只有一种设计，印多少都一样；短 URL 也让二维码更小更好印。
+   * 通用码：独立路径，**不占用域名根路径**。
+   *
+   * 根路径是车主输域名进来的地方，应该直达后台/登录；
+   * 通用码是印在贴纸上给陌生人扫的，两者混在一起会让人找不到入口。
+   *
+   * 因为它不带车辆编号，同一个码无法区分是哪辆车 —— 扫码页再让扫码人选。
    */
-  const universalUrl = (base) => `${base}/`;
+  const universalUrl = (base) => `${base}/m`;
 
   const baseUrlOf = (req) => publicBaseUrl || req.origin;
 
@@ -254,12 +257,23 @@ function createApp(options) {
   }
 
   /**
-   * 通用码（域名根路径）。
+   * 域名根路径 = 车主入口。
+   *
+   * 车主输域名进来，期望的是后台（没登录就先去登录页），而不是看到给陌生人看的扫码页。
+   * 通用码是印在贴纸上的，走 /m，见 handleUniversalScan。
+   */
+  async function handleRoot(req) {
+    const session = await currentSession(req);
+    return redirectResponse(homeFor(session));
+  }
+
+  /**
+   * 通用码（/m）。
    *
    * 同一个二维码贴在所有车上，所以这里必须回答「扫的是哪辆车」：
    *   - 只启用了一辆 → 直接进那辆车，扫码人无感
    *   - 启用多辆     → 列出车牌让扫码人点（人就站在车前，照着车牌点一下）
-   * 界面上的措辞刻意保持中性，不暴露"车主有几辆车"以外的信息。
+   * 只认平台方自己录的车（owner_id 为空），绝不能把车主的车列出来。
    */
   async function handleUniversalScan(req) {
     // 只认平台方自己录的车（owner_id 为空）。
@@ -853,8 +867,10 @@ function createApp(options) {
 
   const routes = [
     ['GET', /^\/healthz$/, async () => jsonResponse(200, { ok: true })],
-    // 根路径就是「通用码」：一张贴纸贴所有车，扫码后由页面决定是哪辆
-    ['GET', /^\/$/, handleUniversalScan],
+    // 根路径：车主入口（直接进后台，没登录就去登录页）
+    ['GET', /^\/$/, handleRoot],
+    // 通用码：印在贴纸上给陌生人扫的，独立路径
+    ['GET', /^\/m\/?$/, handleUniversalScan],
     ['GET', new RegExp(`^/c/${ID}$`), handleScan],
     ['POST', new RegExp(`^/c/${ID}/call$`), handlePostCall],
 

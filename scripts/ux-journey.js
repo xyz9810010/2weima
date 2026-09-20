@@ -136,12 +136,19 @@ async function inViewport(page, selector) {
   });
 
   try {
-    /* ---------- 1. 陌生人扫到一个还没建车的域名 ---------- */
-    console.log('\n【1】陌生人视角：还没建车时访问首页');
+    /* ---------- 1. 车主输域名 vs 陌生人扫码 ---------- */
+    console.log('\n【1】车主输域名进来，应该进后台；通用码在 /m');
     await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-    await shot(page, '01-scan-nocar');
-    note('INFO', `页面标题：${await page.title()}`);
-    note('INFO', `可见文字：${(await page.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 90)}`);
+    await shot(page, '01-root-goes-login');
+    note(page.url().includes('/login') ? 'OK' : 'BAD', `输域名后到的是登录页：${page.url().replace(BASE, '')}`);
+    const loginForm = await page.locator('input[name="password"]').count();
+    note(loginForm > 0 ? 'OK' : 'BAD', '登录页有密码输入框');
+
+    await page.goto(`${BASE}/m`, { waitUntil: 'domcontentloaded' });
+    await shot(page, '02-universal-nocar');
+    const uniText = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
+    note(uniText.includes('暂时无法联系车主') ? 'OK' : 'BAD', `通用码还没车时给人话：${uniText.slice(0, 50)}`);
+    note((await page.locator('input[name="password"]').count()) === 0 ? 'OK' : 'BAD', '通用码页面不会露出登录表单');
 
     /* ---------- 2. 车主注册 ---------- */
     console.log('\n【2】车主注册');

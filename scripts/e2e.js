@@ -124,11 +124,12 @@ async function run() {
   section('1. 基础与鉴权');
   check('GET /healthz = 200', (await get('/healthz')).status === 200);
 
-  // 根路径现在是「通用码」的落地页（扫码方），不再是后台入口
+  // 根路径 = 车主入口；通用码在 /m
   {
     const root = await get('/');
-    check('根路径是扫码方页面，不再跳后台', root.location === '', root.location);
-    check('还没建车时根路径给出人话提示', root.status === 200 && root.text.includes('暂时无法联系车主'), root.status);
+    check('未登录访问根路径 → 登录页', root.status === 302 && root.location === '/login', root.status + ' ' + root.location);
+    const uni = await get('/m');
+    check('通用码路径在 /m', uni.status === 200, uni.status);
   }
   check('未登录访问 /admin 跳登录页', (await get('/admin')).location === '/login');
   check('未登录访问 /me 跳登录页', (await get('/me')).location === '/login');
@@ -391,19 +392,19 @@ async function run() {
     const { toSvg } = require('../src/qr.js');
 
     // 上一节把车都删光了，正好先测「什么都没有」的情况
-    check('一辆车都没有时根路径给出提示', (await get('/')).status === 200);
+    check('一辆车都没有时通用码给出提示', (await get('/m')).status === 200);
 
     const adminRow = await get('/admin');
     check('后台顶部展示通用二维码', adminRow.text.includes('通用二维码'));
-    check('后台写明通用码地址是根路径', adminRow.text.includes(`${base}/`));
+    check('后台写明通用码地址是 /m', adminRow.text.includes(`${base}/m`));
 
     const uniSvg = await get('/admin/universal.svg');
     check('通用码 SVG = 200', uniSvg.status === 200 && uniSvg.text.startsWith('<svg'), uniSvg.status);
-    // SVG 是确定性的，直接和「用根路径重新编码一次」的结果比对，
-    // 这样能证明通用码里装的确实是 域名/ 而不是某辆车的固定编号
+    // SVG 是确定性的，直接和「用 /m 重新编码一次」的结果比对，
+    // 这样能证明通用码里装的确实是 域名/m 而不是某辆车的固定编号
     check(
-      '【关键】通用码内容 = 域名根路径',
-      uniSvg.text === toSvg(`${base}/`, { scale: 8, quiet: 3 }),
+      '【关键】通用码内容 = 域名/m',
+      uniSvg.text === toSvg(`${base}/m`, { scale: 8, quiet: 3 }),
       '通用码内容不对'
     );
 
@@ -412,7 +413,7 @@ async function run() {
     });
     check('建第一辆启用中的车', a.location.includes('notice=created'), a.location);
 
-    const direct = await get('/');
+    const direct = await get('/m');
     check('只启用 1 辆车时，通用码直达该车', direct.status === 200 && direct.text.includes('浙A·77777'), direct.status);
     check('直达时就有拨号按钮', direct.text.includes('href="tel:'));
     check('直达时没有选车牌页', !direct.text.includes('请选择挡路的车辆'));
@@ -422,7 +423,7 @@ async function run() {
     });
     check('建第二辆启用中的车', b.location.includes('notice=created'), b.location);
 
-    const picker = await get('/');
+    const picker = await get('/m');
     check('启用 2 辆车时，通用码显示选车牌页', picker.status === 200 && picker.text.includes('请选择挡路的车辆'), picker.status);
     check('选车牌页列出两辆车牌', picker.text.includes('浙A·77777') && picker.text.includes('苏D·12345'));
     check('选车牌页本身不给拨号链接（号码要点进去才出现）', !picker.text.includes('href="tel:'));
@@ -465,7 +466,7 @@ async function run() {
     check('通用贴纸不印任何车牌', !uniPrint.text.includes('浙A·77777') && !uniPrint.text.includes('苏D·12345'));
 
     for (const c of codes) await post(`/admin/cars/${c}/delete`);
-    check('全部删掉后根路径又给出提示', (await get('/')).status === 200);
+    check('全部删掉后通用码又给出提示', (await get('/m')).status === 200);
   }
 
   section('9. 多租户：每个车主一个账号，互相看不见');
@@ -540,9 +541,9 @@ async function run() {
       const stillMine = await a.get('/me');
       check('甲的车没被改动', stillMine.text.includes('甲A·11111') && !stillMine.text.includes('被改了'));
 
-      // 通用码（根路径）绝不能把车主的车列出来
-      const rootAfter = await get('/', { auth: false });
-      check('【隐私】通用码不暴露车主的车', !rootAfter.text.includes('甲A·11111') && !rootAfter.text.includes('乙B·22222'), '车主的车牌被公开了！');
+      // 通用码（/m）绝不能把车主的车列出来
+      const uniAfter = await get('/m', { auth: false });
+      check('【隐私】通用码不暴露车主的车', !uniAfter.text.includes('甲A·11111') && !uniAfter.text.includes('乙B·22222'), '车主的车牌被公开了！');
     }
 
     // 平台方看得到全部 + 账号列表
