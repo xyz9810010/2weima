@@ -844,26 +844,45 @@ function printPage(
   <a class="btn btn-sm btn-ghost" href="/admin">返回后台</a>
   <button class="btn btn-sm btn-primary" type="button" data-print>打印 / 另存为 PDF</button>
   ${path ? sizeSwitch(path, size) : ''}
-  <span class="hint">${label}。建议用不干胶纸打印，贴在挡风玻璃内侧。</span>
+  <span class="hint">白色区域就是 A4 纸的版面，贴纸按真实尺寸（${label}）排。</span>
 </div>
 
-${sticker(car, { qrSvg, size })}
+<div class="print-notes">
+  <p class="print-note">
+    <b>打印时把「缩放」设成 100%（或「实际大小」）</b>，边距用默认即可 —— 否则贴纸尺寸会跟着变，
+    二维码可能小到扫不动。打印完沿贴纸的黑色边框裁剪。
+  </p>
+  <p class="print-note">
+    ${
+      blank
+        ? `这是<b>空白贴纸</b>：编号 <b>${esc(printedCode)}</b>，还没绑定到车辆。<br>
+           贴到车上之前，请车主用手机扫一下这张贴纸，选中自己的车完成绑定；<br>
+           绑定之前别人扫开只会看到「这张贴纸还没绑定车辆」。<br>
+           二维码内容：${esc(baseUrl)}/c/${esc(printedCode)}`
+        : universal
+          ? '这是通用贴纸：一张可以贴在任意一辆车上。扫码后如果车主启用了多辆车，扫码人需要先点一下车牌。'
+          : `贴纸外观是通用的（不印车牌、不印编号），但每张的码都指向后台里的一条记录。<br>
+           改车牌、改号码、换到别的车上，都只改那条记录，贴纸不用重印。<br>
+           二维码内容：${esc(baseUrl)}/c/${esc(printedCode)}`
+    }
+  </p>
+</div>
 
-<p class="print-note">
-  ${
-    blank
-      ? `这是<b>空白贴纸</b>：编号 <b>${esc(printedCode)}</b>，还没绑定到车辆。<br>
-         贴到车上之前，请车主用手机扫一下这张贴纸，选中自己的车完成绑定；<br>
-         绑定之前别人扫开只会看到「这张贴纸还没绑定车辆」。<br>
-         二维码内容：${esc(baseUrl)}/c/${esc(printedCode)}`
-      : universal
-        ? '这是通用贴纸：一张可以贴在任意一辆车上。扫码后如果车主启用了多辆车，扫码人需要先点一下车牌。'
-        : `贴纸外观是通用的（不印车牌、不印编号），但每张的码都指向后台里的一条记录。<br>
-         改车牌、改号码、换到别的车上，都只改那条记录，贴纸不用重印。<br>
-         二维码内容：${esc(baseUrl)}/c/${esc(printedCode)}`
-  }
-</p>`,
+<div class="paper paper-single">
+  ${sticker(car, { qrSvg, size })}
+</div>`,
   });
+}
+
+/** 一张 A4 每行能放几张：和 CSS 里 .sticker-sheet 的宽度、间距保持同一套算法 */
+const STICKER_MM = { square: 50, square6: 60, rect: 100 };
+const SHEET_MM = 198; // A4 210mm 减去左右各 6mm 页边距
+const SHEET_GAP_MM = 5;
+
+function stickersPerRow(size) {
+  const key = stickerSizeOf(size);
+  const per = Math.floor((SHEET_MM + SHEET_GAP_MM) / (STICKER_MM[key] + SHEET_GAP_MM));
+  return Math.max(1, per);
 }
 
 /** 批量打印：车辆各出一张贴纸，或把一批空白编号一次打完，排在一页里 */
@@ -888,17 +907,21 @@ function printAllPage({ cars, baseUrl, size = 'square', path = '/print-all', bla
   <button class="btn btn-sm btn-primary" type="button" data-print>打印 / 另存为 PDF</button>
   ${sizeSwitch(path, size)}
   <span class="hint">
-    ${
-      blank
-        ? `${label}，共 ${cars.length} 张空白贴纸。框外那行是这张贴纸的编号，裁剪时剪掉；
-           贴之前请车主扫一下并在手机上绑定，绑定前别人扫开只会看到「还没绑定车辆」。`
-        : `${label}，每辆车一张，共 ${cars.length} 张。框外那行车牌只是给你对号用，裁剪时剪掉。
-           贴纸本身外观完全一样，贴之前请对照这行车牌，别贴错车。`
-    }
+    白色区域就是 A4 纸的版面：${label} 每行 ${stickersPerRow(size)} 张，共 ${cars.length} 张，
+    屏幕上怎么排，纸上就怎么排。
   </span>
 </div>
 
-<div class="sticker-sheet">${sheet}</div>`,
+<div class="print-notes">
+  <p class="print-note">
+    <b>打印时把「缩放」设成 100%（或「实际大小」）</b>，边距用默认即可 —— 否则贴纸尺寸会跟着变，
+    二维码可能小到扫不动。打印完沿每张贴纸的黑色边框裁剪；框外那行小字是给你对号用的，剪掉。
+  </p>
+</div>
+
+<div class="paper">
+  <div class="sticker-sheet">${sheet}</div>
+</div>`,
   });
 }
 

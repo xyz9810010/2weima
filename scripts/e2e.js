@@ -312,6 +312,44 @@ async function run() {
     const bogus = await get(`/admin/cars/${code}/print?size=big`);
     check('未知尺寸回落到方形', bogus.status === 200 && bogus.text.includes('sticker-square'), bogus.status);
 
+    /* ---- 打印页本身：预览、缩放提示、每行几张 ---- */
+    check('单张贴纸打印页有 A4 纸版面预览', def.text.includes('class="paper paper-single"'));
+    check('单张贴纸打印页提醒「缩放设成 100%」', def.text.includes('缩放'), '用户最容易踩的坑：缩放不是 100%');
+    check('单张贴纸打印页说明沿边框裁剪', def.text.includes('裁剪'));
+    check('打印说明放在纸的上面（不用滚过整张 A4 才看到）', def.text.indexOf('print-notes') < def.text.indexOf('class="paper'));
+
+    const sheet = await get('/print-all?size=square');
+    check('批量打印页也有 A4 版面预览', sheet.text.includes('class="paper"') && sheet.text.includes('sticker-sheet'));
+    check('批量打印页写明每行几张（5×5 → 3 张）', /每行 3 张/.test(sheet.text), sheet.text.slice(0, 300));
+    check('批量打印页也提醒缩放 100%', sheet.text.includes('缩放'));
+    check('批量打印页写明「屏幕上怎么排，纸上就怎么排」', sheet.text.includes('屏幕上怎么排'));
+
+    const sheet6 = await get('/print-all?size=square6');
+    check('6×6 每行也是 3 张', /每行 3 张/.test(sheet6.text));
+    const sheetRect = await get('/print-all?size=rect');
+    check('10×5 长方形每行 1 张', /每行 1 张/.test(sheetRect.text), sheetRect.text.slice(0, 300));
+
+    // 屏幕上「每行几张」必须等于打印时的行数，否则预览就是在骗人
+    {
+      const css = (await get('/style.css')).text;
+      const printBlock = css.slice(css.indexOf('@media print'));
+      check(
+        '【关键】打印时隐藏工具栏和说明（纸上只要贴纸）',
+        /\.print-toolbar,\s*\.print-note\s*\{\s*display: none;/.test(printBlock),
+        '打印样式没隐藏工具栏'
+      );
+      const sheetStart = css.indexOf('.sticker-sheet {');
+      const screenSheetRule = css.slice(sheetStart, sheetStart + 400);
+      check(
+        '屏幕与打印共用同一套贴纸网格（同一宽度、同一间距）',
+        screenSheetRule.includes('width: 198mm') &&
+          screenSheetRule.includes('gap: 5mm') &&
+          /\.sticker-sheet \{\s*width: 100%;\s*max-width: 198mm;/.test(printBlock),
+        '两套网格会算出不一样的每行张数'
+      );
+      check('纸张预览只在屏幕上画（打印时去掉轮廓与内边距）', /\.paper \{[\s\S]*?box-shadow: none;/.test(printBlock));
+    }
+
     // 二维码本体必须铺满画布。
     // 曾经画布按「含静默区的正方形内接于圆」放大 √2（为圆形轮廓留的），
     // 结果 44mm 的贴纸框里二维码本体只有 26mm，四周一大圈白边 —— 白扔 41% 的边长。

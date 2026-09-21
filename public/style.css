@@ -1301,21 +1301,44 @@ textarea:focus {
   word-break: break-all;
 }
 
-/* 批量打印：每辆车一张，自动排成网格 */
+/* 打印页：屏幕上的「纸」。
+   屏幕上按 A4 的样子显示（210×297mm，四周 6mm 内边距 = @page 的页边距），
+   这样用户点打印之前就看得见「会印成什么样、每行几张」。纸张轮廓只在屏幕上画，
+   打印时 .paper 会被剥掉，交给真正的纸张。 */
+.paper {
+  box-sizing: border-box;
+  width: 210mm;
+  min-height: 297mm;
+  padding: 6mm;
+  margin: 0 auto 20px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.14), 0 10px 30px rgba(15, 23, 42, 0.1);
+}
 
+.paper-single {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* 贴纸网格：宽 = A4 可打印宽度（210 - 2×6mm = 198mm），间距用 gap。
+   **屏幕和打印共用这一套盒模型**，所以「屏幕每行几张」就是「纸上每行几张」。
+   max-width:100% 是为了兜住「打印机实际边距比 6mm 更宽」的情况：宁可排得松一点，
+   也不要溢出纸张被裁掉。 */
 .sticker-sheet {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 6mm;
-  max-width: 210mm;
-  margin: 0 auto;
-  padding: 0 8mm 20mm;
+  align-content: flex-start;
+  gap: 5mm;
+  width: 198mm;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 .sticker-cell {
-  page-break-inside: avoid;
   break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .sticker-cell .sticker {
@@ -1327,13 +1350,28 @@ textarea:focus {
   margin-top: 1mm;
 }
 
+/* 屏幕上的打印说明：一张浅底卡片，宽度和纸一致，读起来成块。
+   打印时隐藏（见 @media print）—— 纸上只要贴纸。 */
+.print-notes {
+  max-width: 198mm;
+  margin: 0 auto 12px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
 .print-note {
-  max-width: 105mm;
-  margin: 0 auto 30px;
-  font-size: 9pt;
-  color: #666;
-  text-align: center;
-  word-break: break-all;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #475569;
+  /* 网址很长：按词断行，别一个字符一个字符硬拆 */
+  overflow-wrap: break-word;
+}
+
+.print-note + .print-note {
+  margin-top: 8px;
 }
 
 /* 通用码在启用多辆车时的「选车牌」页 */
@@ -1522,25 +1560,35 @@ textarea:focus {
     display: none;
   }
 
+  /* 屏幕上的「纸」只是预览：打印时把轮廓和内边距全去掉，位置交给 @page */
+  .paper {
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    box-shadow: none;
+  }
+
+  .paper-single {
+    display: block;
+  }
+
+  .paper-single .sticker {
+    margin: 0 auto;
+  }
+
+  /* 网格的宽度和间距与屏幕上完全一致（宽度自适应真实可打印区域） */
+  .sticker-sheet {
+    width: 100%;
+    max-width: 198mm;
+  }
+
   .sticker {
     margin: 0;
     border-width: 1px;
     box-shadow: none;
     page-break-inside: avoid;
     break-inside: avoid;
-  }
-
-  .sticker-sheet {
-    display: block;
-    max-width: none;
-    padding: 0;
-    gap: 0;
-  }
-
-  .sticker-cell {
-    display: inline-block;
-    vertical-align: top;
-    margin: 0 4mm 4mm 0;
   }
 
   /* 贴纸按实际毫米尺寸打印，@page 只留机器不可打印的窄边 */
