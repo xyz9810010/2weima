@@ -1211,9 +1211,12 @@ textarea:focus {
 .size-switch {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   font-size: 13px;
   color: #4b5563;
+  /* 「尺寸：」这三个字不能被拆成两行（手机上窄，flex 会把文本节点当独立项挤） */
+  white-space: nowrap;
 }
 
 /* 车辆卡片里那句「编号和二维码是永久的」 */
@@ -1523,6 +1526,70 @@ textarea:focus {
   .more-records > summary {
     padding-top: 12px;
     padding-bottom: 12px;
+  }
+}
+
+/* 打印说明卡片里那条「手机上按比例缩小」的提示：只在窄屏显示 */
+.print-note-mobile {
+  display: none;
+}
+
+/* 手机端的 A4 预览：手机屏幕放不下 210mm 宽的纸（794px），
+   所以按比例缩小显示，好让人一眼看完整版式。
+   缩放的**只是预览**：打印尺寸由 @page 和贴纸的 mm 尺寸决定，不受影响。
+   故意用 @media screen 限定 —— 打印媒体绝不套用这些缩放（否则贴纸会被缩小印出来）。 */
+@media screen and (max-width: 900px) {
+  .paper {
+    zoom: 0.8;
+  }
+
+  .print-note-mobile {
+    display: block;
+  }
+}
+
+@media screen and (max-width: 720px) {
+  .paper {
+    zoom: 0.62;
+  }
+}
+
+@media screen and (max-width: 560px) {
+  .paper {
+    zoom: 0.48;
+  }
+
+  /* 工具栏在手机上：第一行「返回 + 打印」（打印尽量占满），尺寸切换单独一行。
+     不把每个按钮都拉成整行 —— 那样工具栏会有 5 行高，把预览挤出首屏。 */
+  .print-toolbar {
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .print-toolbar .btn-primary {
+    flex: 1 1 auto;
+  }
+
+  .size-switch {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+
+  .print-toolbar .size-switch .btn {
+    flex: 1 1 0;
+    text-align: center;
+  }
+}
+
+@media screen and (max-width: 440px) {
+  .paper {
+    zoom: 0.4;
+  }
+}
+
+@media screen and (max-width: 340px) {
+  .paper {
+    zoom: 0.33;
   }
 }
 

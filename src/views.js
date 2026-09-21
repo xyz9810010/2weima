@@ -848,6 +848,9 @@ function printPage(
 </div>
 
 <div class="print-notes">
+  <p class="print-note print-note-mobile">
+    手机上纸张按比例缩小显示，只为一眼看完整版式；打印出来的尺寸不受影响。
+  </p>
   <p class="print-note">
     <b>打印时把「缩放」设成 100%（或「实际大小」）</b>，边距用默认即可 —— 否则贴纸尺寸会跟着变，
     二维码可能小到扫不动。打印完沿贴纸的黑色边框裁剪。
@@ -913,6 +916,9 @@ function printAllPage({ cars, baseUrl, size = 'square', path = '/print-all', bla
 </div>
 
 <div class="print-notes">
+  <p class="print-note print-note-mobile">
+    手机上纸张按比例缩小显示，只为一眼看完整版式；打印出来的尺寸不受影响。
+  </p>
   <p class="print-note">
     <b>打印时把「缩放」设成 100%（或「实际大小」）</b>，边距用默认即可 —— 否则贴纸尺寸会跟着变，
     二维码可能小到扫不动。打印完沿每张贴纸的黑色边框裁剪；框外那行小字是给你对号用的，剪掉。

@@ -348,6 +348,17 @@ async function run() {
         '两套网格会算出不一样的每行张数'
       );
       check('纸张预览只在屏幕上画（打印时去掉轮廓与内边距）', /\.paper \{[\s\S]*?box-shadow: none;/.test(printBlock));
+      check('打印页含「手机上按比例缩小」的说明', def.text.includes('print-note-mobile'));
+      check(
+        '手机端的纸张缩放只作用于屏幕（@media screen 限定）',
+        /@media screen and \(max-width: 900px\) \{[\s\S]*?\.paper \{\s*zoom:/.test(css),
+        '用了不带 screen 限定的媒体查询，缩放会漏进打印'
+      );
+      check(
+        '「手机上按比例缩小」提示平时隐藏、窄屏才显示',
+        /\.print-note-mobile \{\s*display: none;/.test(css) &&
+          /\.print-note-mobile \{\s*display: block;/.test(css)
+      );
     }
 
     // 二维码本体必须铺满画布。
