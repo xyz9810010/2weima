@@ -216,6 +216,35 @@ PUBLIC_BASE_URL = "https://chezai-qrcode.<你的账号>.workers.dev"
 
 然后打开 `https://<你的域名>/admin`，用 `ADMIN_PASSWORD` 登录，点「新增车辆」。
 
+### 加表不用先跑迁移
+
+`codes` 表（贴纸编号）由 Worker 在冷启动时自己补：
+
+```sql
+CREATE TABLE IF NOT EXISTS codes (...);
+```
+
+这样「加一张表」不需要「先跑迁移再部署」——否则中间那段时间线上每个请求都会
+因为查不存在的表而 500。表结构仍以 `schema.sql` 为准，这里只是保证它一定存在。
+
+历史车辆（早期版本的编号就是车辆编号）想出现在后台编号列表里，跑一次这个即可（幂等，可重复执行）：
+
+```bash
+npx wrangler d1 execute chezai-qrcode --remote --file=./scripts/migrate-legacy-codes.sql
+```
+
+> **不跑也不影响扫码**：编号表里查不到时会回落到按车辆编号查，
+> 已经印出去的老贴纸永远有效。Node 版启动时会自动执行同一句。
+
+**如果 `npx` 卡住不动**（某些网络环境下 `npx wrangler@4` 会一直没输出），
+装到本地直接用，绕开 npx 的解析：
+
+```bash
+npm i --no-save wrangler@4        # 不写进 package.json
+node node_modules/wrangler/bin/wrangler.js deploy
+node node_modules/wrangler/bin/wrangler.js d1 execute chezai-qrcode --remote --file=./schema.sql
+```
+
 ### Workers 上的几个细节
 
 - **管理密码不存在数据库里**。Node 版会把密码 hash 后存库；Worker 版直接比对平台 secret，
