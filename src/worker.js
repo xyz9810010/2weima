@@ -25,12 +25,50 @@ const { createStore } = d1Module;
  */
 let appPromise = null;
 
-function getApp(env) {
-  if (!appPromise) {
-    appPromise = buildApp(env).catch((error) => {
-      appPromise = null; // 失败不要污染缓存，下次请求重试
+/**
+ * 补表：每个 isolate 冷启动时跑一次 `CREATE TABLE IF NOT EXISTS`。
+ *
+ * 为什么放在代码里而不是只靠 wrangler d1 execute：
+ *   加一张表如果必须「先跑迁移、再部署」，中间那段时间线上就是坏的
+ *   （新代码查一张还不存在的表 → 每个请求 500）。放在这里，部署顺序随便，
+ *   而且老库升级不需要任何手工步骤。
+ *
+ * 代价：每个 isolate 冷启动多一两条 DDL（幂等、无副作用）。
+ * 表结构仍然以 schema.sql 为准 —— 这里只是保证它「一定存在」。
+ */
+let schemaPromise = null;
+
+function ensureSchema(env) {
+  if (!schemaPromise) {
+    schemaPromise = env.DB.batch([
+      env.DB.prepare(
+        `CREATE TABLE IF NOT EXISTS codes (
+           code       TEXT PRIMARY KEY,
+           car_id     TEXT REFERENCES cars(id) ON DELETE SET NULL,
+           owner_id   TEXT REFERENCES users(id) ON DELETE SET NULL,
+           note       TEXT NOT NULL DEFAULT '',
+           created_at INTEGER NOT NULL,
+           bound_at   INTEGER
+         )`
+      ),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_codes_car ON codes (car_id)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_codes_owner ON codes (owner_id, created_at DESC)'),
+    ]).catch((error) => {
+      schemaPromise = null; // 失败不要污染缓存，下次请求重试
       throw error;
     });
+  }
+  return schemaPromise;
+}
+
+function getApp(env) {
+  if (!appPromise) {
+    appPromise = ensureSchema(env)
+      .then(() => buildApp(env))
+      .catch((error) => {
+        appPromise = null; // 失败不要污染缓存，下次请求重试
+        throw error;
+      });
   }
   return appPromise;
 }

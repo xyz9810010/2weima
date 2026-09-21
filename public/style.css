@@ -852,6 +852,111 @@ textarea:focus {
   margin: 0;
 }
 
+/* ---------------------------- 贴纸编号 ---------------------------- */
+
+/* 「生成空白贴纸」：数量 + 按钮挤在一个小表单里，别占一整行 */
+.code-generate {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-generate input {
+  width: 64px;
+  text-align: center;
+}
+
+.code-group {
+  margin-top: 8px;
+}
+
+.code-group > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--muted);
+  padding: 6px 2px;
+}
+
+.code-group > summary:hover {
+  color: var(--primary);
+}
+
+.code-group[open] > summary {
+  margin-bottom: 6px;
+}
+
+.code-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 一条编号占一行：编号 · 状态 · 操作。跟拨号记录同一套紧凑原则 —— 编号会攒到几十个 */
+.code-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: var(--bg);
+  font-size: 13px;
+}
+
+.code-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+}
+
+.code-ops {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-ops form {
+  margin: 0;
+}
+
+.code-owner {
+  font-size: 12px;
+}
+
+/* 绑定：车牌下拉 + 一个按钮，跟着这一行走 */
+.code-bind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.code-bind select {
+  max-width: 46vw;
+}
+
+.code-bind .btn,
+.code-ops .btn {
+  padding-left: 12px;
+  padding-right: 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* 待绑定页上的编号：等宽字体，一眼看清是哪一串 */
+.hero .hero-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 24px;
+  letter-spacing: 3px;
+}
+
 /* ------------------------------ 提示条 ---------------------------- */
 
 .banner {

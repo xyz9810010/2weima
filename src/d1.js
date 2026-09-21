@@ -244,6 +244,93 @@ function createStore(db) {
     async bumpRateLimit(bucket, windowMs, limit) {
       return bumpRateLimit(bucket, windowMs, limit);
     },
+
+    /* ------------------------------ 贴纸编号 ------------------------------ */
+
+    async getCode(code) {
+      return first('SELECT * FROM codes WHERE code = ?', String(code));
+    },
+
+    async listCodes(limit) {
+      return all(
+        `SELECT codes.*, cars.plate AS plate, cars.enabled AS car_enabled, users.contact AS owner_contact
+         FROM codes
+         LEFT JOIN cars ON cars.id = codes.car_id
+         LEFT JOIN users ON users.id = codes.owner_id
+         ORDER BY codes.created_at DESC
+         LIMIT ?`,
+        Number(limit) || 500
+      );
+    },
+
+    async listCodesByOwner(ownerId, limit) {
+      return all(
+        `SELECT codes.*, cars.plate AS plate, cars.enabled AS car_enabled
+         FROM codes LEFT JOIN cars ON cars.id = codes.car_id
+         WHERE codes.owner_id = ?
+         ORDER BY codes.created_at DESC
+         LIMIT ?`,
+        String(ownerId),
+        Number(limit) || 500
+      );
+    },
+
+    async createCode(entry) {
+      const now = Date.now();
+      await run(
+        `INSERT OR IGNORE INTO codes (code, car_id, owner_id, note, created_at, bound_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        entry.code,
+        entry.car_id || null,
+        entry.owner_id || null,
+        entry.note || '',
+        now,
+        entry.car_id ? now : null
+      );
+      return first('SELECT * FROM codes WHERE code = ?', entry.code);
+    },
+
+    /** 绑定同时决定归属（同 src/db.js 的说明：否则会有跨租户解绑漏洞） */
+    async bindCode(code, carId, ownerId) {
+      const result = await run(
+        'UPDATE codes SET car_id = ?, bound_at = ?, owner_id = ? WHERE code = ?',
+        carId || null,
+        carId ? Date.now() : null,
+        ownerId || null,
+        String(code)
+      );
+      return Boolean(result.meta && result.meta.changes);
+    },
+
+    async unbindCode(code) {
+      const result = await run('UPDATE codes SET car_id = NULL, bound_at = NULL WHERE code = ?', String(code));
+      return Boolean(result.meta && result.meta.changes);
+    },
+
+    async deleteCode(code) {
+      const result = await run('DELETE FROM codes WHERE code = ?', String(code));
+      return Boolean(result.meta && result.meta.changes);
+    },
+
+    /** 删车时把它的贴纸一起作废（同 src/db.js 的说明） */
+    async deleteCodesByCar(carId) {
+      const result = await run('DELETE FROM codes WHERE car_id = ?', String(carId));
+      return result.meta ? Number(result.meta.changes) : 0;
+    },
+
+    /**
+     * D1 上不做启动迁移（每次请求一次写不划算）。
+     * 老的「车辆编号」靠 resolveCode 的回落照常能扫，
+     * 需要在后台列表里看到历史编号时，手动跑一次：
+     *   npx wrangler d1 execute chezai-qrcode --remote --file=./scripts/migrate-legacy-codes.sql
+     */
+    async adoptLegacyCodes() {
+      const result = await run(
+        `INSERT OR IGNORE INTO codes (code, car_id, owner_id, note, created_at, bound_at)
+         SELECT id, id, owner_id, '', created_at, created_at FROM cars`
+      );
+      return result.meta ? Number(result.meta.changes) : 0;
+    },
   };
 }
 

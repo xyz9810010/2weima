@@ -482,11 +482,144 @@ function userListHtml(users) {
     .join('\n')}</ul>`;
 }
 
+/* --------------------------- 贴纸编号 ---------------------------- */
+
+/**
+ * 一条编号。已绑定的显示它绑在哪辆车上，未绑定的给一个「绑定到…」的下拉。
+ *
+ * 这里刻意把「编号」放在最前面且用等宽字体：贴纸正面不印编号，后台对号时
+ * 靠的就是这一串，长得像什么不重要，好抄才重要。
+ */
+function codeRowHtml(entry, { cars, isAdmin }) {
+  const bound = Boolean(entry.car_id);
+  const plate = entry.plate || (bound ? entry.car_id : '');
+
+  if (!bound) {
+    const options = cars
+      .map((car) => `<option value="${esc(car.id)}">${esc(carOptionLabel(car))}</option>`)
+      .join('');
+    return `<li class="code-row">
+    <code class="code-id">${esc(entry.code)}</code>
+    <span class="badge badge-off">未绑定</span>
+    ${
+      cars.length
+        ? `<form method="post" action="/codes/${esc(entry.code)}/bind" class="code-bind" data-remote>
+        <select name="car_id" aria-label="绑定到哪辆车">${options}</select>
+        <button class="btn btn-xs btn-primary" type="submit">绑定</button>
+      </form>`
+        : '<span class="hint">先添加一辆车</span>'
+    }
+    <span class="code-ops">
+      <a class="btn btn-xs btn-ghost" href="/codes/${esc(entry.code)}/print" target="_blank" rel="noreferrer">打印</a>
+      <form method="post" action="/codes/${esc(entry.code)}/delete" data-remote
+            data-confirm="删除编号 ${esc(entry.code)}？这张贴纸作废，别人扫开就找不到车了。">
+        <button class="btn btn-xs btn-ghost" type="submit">删除</button>
+      </form>
+    </span>
+  </li>`;
+  }
+
+  return `<li class="code-row">
+    <code class="code-id">${esc(entry.code)}</code>
+    <span class="badge ${entry.car_enabled === 0 ? 'badge-off' : 'badge-on'}">${esc(plate)}</span>
+    ${isAdmin && entry.owner_contact ? `<span class="muted code-owner">${esc(entry.owner_contact)}</span>` : ''}
+    <span class="code-ops">
+      <a class="btn btn-xs btn-ghost" href="/codes/${esc(entry.code)}/print" target="_blank" rel="noreferrer">打印</a>
+      <form method="post" action="/codes/${esc(entry.code)}/unbind" data-remote>
+        <button class="btn btn-xs btn-ghost" type="submit">解绑</button>
+      </form>
+    </span>
+  </li>`;
+}
+
+function carOptionLabel(car) {
+  const plate = car.plate || '未填写车牌';
+  return car.enabled ? plate : `${plate}（已停用）`;
+}
+
+/** 分组：未绑定的铺在前面（那是要干活的部分），已绑定的收起来 */
+function codeListHtml(codes, { cars = [], isAdmin = false, limit = 8 } = {}) {
+  if (!codes.length) {
+    return '<p class="muted">还没有贴纸编号。点右上角「生成空白贴纸」一次生成一批，谁拿到谁绑定。</p>';
+  }
+
+  const unbound = codes.filter((entry) => !entry.car_id);
+  const bound = codes.filter((entry) => entry.car_id);
+
+  const group = (title, rows, open) => {
+    if (!rows.length) return '';
+    const head = rows.slice(0, limit);
+    const rest = rows.slice(limit);
+    const list = (part) => `<ul class="code-list">${part.map((e) => codeRowHtml(e, { cars, isAdmin })).join('\n')}</ul>`;
+    return `<details class="code-group"${open ? ' open' : ''}>
+    <summary>${title}（${rows.length}）</summary>
+    ${list(head)}
+    ${rest.length ? `<details class="more-records"><summary>还有 ${rest.length} 个</summary>${list(rest)}</details>` : ''}
+  </details>`;
+  };
+
+  return (
+    group('待绑定', unbound, true) +
+    group('已绑定', bound, false) +
+    (unbound.length
+      ? ''
+      : '<p class="hint">没有待绑定的编号了。要发新贴纸就再生一批。</p>')
+  );
+}
+
+/**
+ * 别人扫到一张「还没绑定」的贴纸时看到的页面。
+ *
+ * 这页只有一个任务：让车主把它绑到自己的车上（或告诉他先登录 / 先加车）。
+ * 对扫码的路人来说这是个死胡同，所以话说清楚：这车还没启用挪车码。
+ */
+function bindCodePage({ code, cars = [], loggedIn = false, home = '/' }) {
+  const carOptions = cars
+    .map((car) => `<option value="${esc(car.id)}">${esc(carOptionLabel(car))}</option>`)
+    .join('');
+
+  const action = !loggedIn
+    ? `<a class="btn btn-primary btn-block" href="/login">我是车主，登录后绑定</a>
+       <p class="hint center">绑定只需要一次：登录 → 选中你的车 → 贴到挡风玻璃上。</p>`
+    : cars.length
+      ? `<form method="post" action="/c/${esc(code)}/bind" class="stack">
+        <label class="field">
+          <span>绑定到我的车</span>
+          <select name="car_id" required>${carOptions}</select>
+        </label>
+        <button class="btn btn-primary btn-block" type="submit">绑定这张贴纸</button>
+      </form>
+      <p class="hint center">绑定之后，别人扫这张贴纸就能直接联系到你了。</p>`
+      : `<a class="btn btn-primary btn-block" href="${esc(home)}">去后台添加一辆车</a>
+       <p class="hint center">你还没有车辆记录，先添加一辆车，再回来绑定这张贴纸。</p>`;
+
+  return layout({
+    title: '贴纸待绑定',
+    body: `<main class="wrap wrap-scan">
+  <div class="hero">
+    <div class="hero-label">贴纸编号</div>
+    <div class="hero-plate hero-code">${esc(code)}</div>
+    <div class="hero-title">这张贴纸还没绑定车辆</div>
+  </div>
+
+  <section class="card card-note">
+    <p class="note-text">如果你是车主：把这张贴纸绑到自己的车上，别人扫它就能找到你。<br>
+      如果你只是路过：说明车主还没有启用这张贴纸的联系方式。</p>
+  </section>
+
+  <section class="card action-card">
+    ${action}
+  </section>
+</main>`,
+  });
+}
+
 function adminPage({
   mode = 'admin',
   account = null,
   cars,
   messages,
+  codes = [],
   users = [],
   baseUrl,
   universal,
@@ -598,6 +731,32 @@ function adminPage({
 
   ${universalSection}
 
+  <section class="card card-codes">
+    <div class="card-head">
+      <h2 class="card-title" id="code-count">贴纸编号（${codes.length}）</h2>
+      <div id="code-actions">
+        <form method="post" action="/codes" class="code-generate" data-remote>
+          <input type="number" name="count" value="1" min="1" max="50" inputmode="numeric"
+                 aria-label="生成几个空白编号">
+          <button class="btn btn-sm btn-primary" type="submit">生成空白贴纸</button>
+        </form>
+      </div>
+    </div>
+    <p class="hint">
+      贴纸印的是<b>编号</b>，不是车牌 —— 可以先印一批空白贴纸，谁拿到谁绑定。
+      换车、绑错了、补印，都只改绑定关系，贴纸不用重印。
+    </p>
+    <details class="card-help">
+      <summary>一批空白贴纸怎么发下去？</summary>
+      <p class="hint">
+        ① 这里生成 N 个编号 → ② 逐个「打印」出贴纸（贴纸上只有编号，没有车牌）→
+        ③ 车主拿到贴纸后用手机扫一下，选中自己的车就绑定好了；绑错了在下面「已绑定」里解绑重绑。
+        同一辆车也可以绑多张贴纸（比如前后各一张）。
+      </p>
+    </details>
+    <div id="code-area">${codeListHtml(codes, { cars, isAdmin })}</div>
+  </section>
+
   <section class="card card-records">
     <div class="card-head">
       <h2 class="card-title">拨号记录</h2>
@@ -671,8 +830,13 @@ function sizeSwitch(path, size) {
   return `<span class="size-switch">尺寸：${link('square', '5×5 方形')}${link('square6', '6×6 方形')}${link('rect', '10×5 长方形')}</span>`;
 }
 
-function printPage(car, { baseUrl, qrSvg, universal = false, size = 'square', path = '' }) {
+function printPage(
+  car,
+  { baseUrl, qrSvg, universal = false, size = 'square', path = '', code = '', blank = false }
+) {
   const label = STICKER_SIZES[stickerSizeOf(size)];
+  // 一张贴纸印的是它自己的编号；没给就按车辆编号（老贴纸的行为）
+  const printedCode = code || car.id;
   return layout({
     title: universal ? `挪车贴纸 · 通用 · ${label}` : `挪车贴纸 · ${label}`,
     bodyClass: 'print-body',
@@ -687,18 +851,23 @@ ${sticker(car, { qrSvg, size })}
 
 <p class="print-note">
   ${
-    universal
-      ? '这是通用贴纸：一张可以贴在任意一辆车上。扫码后如果车主启用了多辆车，扫码人需要先点一下车牌。'
-      : `贴纸外观是通用的（不印车牌、不印编号），但每张的码都指向后台里的一条记录。<br>
+    blank
+      ? `这是<b>空白贴纸</b>：编号 <b>${esc(printedCode)}</b>，还没绑定到车辆。<br>
+         贴到车上之前，请车主用手机扫一下这张贴纸，选中自己的车完成绑定；<br>
+         绑定之前别人扫开只会看到「这张贴纸还没绑定车辆」。<br>
+         二维码内容：${esc(baseUrl)}/c/${esc(printedCode)}`
+      : universal
+        ? '这是通用贴纸：一张可以贴在任意一辆车上。扫码后如果车主启用了多辆车，扫码人需要先点一下车牌。'
+        : `贴纸外观是通用的（不印车牌、不印编号），但每张的码都指向后台里的一条记录。<br>
          改车牌、改号码、换到别的车上，都只改那条记录，贴纸不用重印。<br>
-         二维码内容：${esc(baseUrl)}/c/${esc(car.id)}`
+         二维码内容：${esc(baseUrl)}/c/${esc(printedCode)}`
   }
 </p>`,
   });
 }
 
-/** 批量打印：把启用中的每辆车各出一张贴纸，排在一页里一次打完 */
-function printAllPage({ cars, baseUrl, size = 'square', path = '/print-all' }) {
+/** 批量打印：车辆各出一张贴纸，或把一批空白编号一次打完，排在一页里 */
+function printAllPage({ cars, baseUrl, size = 'square', path = '/print-all', blank = false }) {
   const label = STICKER_SIZES[stickerSizeOf(size)];
   const sheet = cars.length
     ? cars
@@ -709,18 +878,23 @@ function printAllPage({ cars, baseUrl, size = 'square', path = '/print-all' }) {
       </div>`
         )
         .join('\n')
-    : '<p class="muted">没有启用中的车辆。</p>';
+    : `<p class="muted">${blank ? '没有待绑定的空白贴纸。' : '没有启用中的车辆。'}</p>`;
 
   return layout({
-    title: `批量打印挪车贴纸 · ${label}`,
+    title: blank ? `批量打印空白贴纸 · ${label}` : `批量打印挪车贴纸 · ${label}`,
     bodyClass: 'print-body',
     body: `<div class="print-toolbar">
   <a class="btn btn-sm btn-ghost" href="/admin">返回后台</a>
   <button class="btn btn-sm btn-primary" type="button" data-print>打印 / 另存为 PDF</button>
   ${sizeSwitch(path, size)}
   <span class="hint">
-    ${label}，每辆车一张，共 ${cars.length} 张。框外那行车牌只是给你对号用，裁剪时剪掉。
-    贴纸本身外观完全一样，贴之前请对照这行车牌，别贴错车。
+    ${
+      blank
+        ? `${label}，共 ${cars.length} 张空白贴纸。框外那行是这张贴纸的编号，裁剪时剪掉；
+           贴之前请车主扫一下并在手机上绑定，绑定前别人扫开只会看到「还没绑定车辆」。`
+        : `${label}，每辆车一张，共 ${cars.length} 张。框外那行车牌只是给你对号用，裁剪时剪掉。
+           贴纸本身外观完全一样，贴之前请对照这行车牌，别贴错车。`
+    }
   </span>
 </div>
 
@@ -741,6 +915,8 @@ module.exports = {
   recordListHtml,
   recordActionsHtml,
   userListHtml,
+  codeListHtml,
+  bindCodePage,
   printPage,
   printAllPage,
   stickerSizeOf,

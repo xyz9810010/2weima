@@ -39,6 +39,28 @@ CREATE TABLE IF NOT EXISTS cars (
 
 CREATE INDEX IF NOT EXISTS idx_cars_owner ON cars (owner_id, created_at DESC);
 
+-- 贴纸编号（一物一码）。
+--
+-- 二维码里装的是**这个编号**，不是车牌：编号先生成、后绑定到某辆车，
+-- 绑定关系可以随时改。所以：
+--   - 一批贴纸可以印成同样的版式、各不相同的编号，谁拿到谁绑定（批量发码）
+--   - 换车、绑错了、贴纸丢了补印，都只改绑定关系，贴纸本身不用重印
+--
+-- codes.code 与 cars.id 用的是同一套字符、同样 10 位，所以二维码尺寸不变。
+-- **老贴纸（编号 = 车辆编号）不需要迁移**：查不到编号行时会回落到按车辆编号查，
+-- 已在纸上印出去的码永远有效（见 src/app.js 的 resolveCode）。
+CREATE TABLE IF NOT EXISTS codes (
+  code       TEXT PRIMARY KEY,
+  car_id     TEXT REFERENCES cars(id) ON DELETE SET NULL,   -- 空 = 还没绑定到任何车
+  owner_id   TEXT REFERENCES users(id) ON DELETE SET NULL,  -- 谁生成的；空 = 平台方
+  note       TEXT NOT NULL DEFAULT '',                      -- 备注：第几批、发给谁
+  created_at INTEGER NOT NULL,
+  bound_at   INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_codes_car ON codes (car_id);
+CREATE INDEX IF NOT EXISTS idx_codes_owner ON codes (owner_id, created_at DESC);
+
 -- 拨号记录。
 -- 表名 messages 是历史遗留（早期版本这里存扫码人的留言），现在一行 = 一次拨号打点。
 --

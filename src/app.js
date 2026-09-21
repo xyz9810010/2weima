@@ -44,6 +44,14 @@ const NOTICES = {
   read: { text: '已标记为已读。', kind: 'info' },
   readAll: { text: '已全部标记为已读。', kind: 'info' },
   cleaned: { text: '已清理掉空白车辆。', kind: 'info' },
+  codes: { text: '已生成空白贴纸编号，打印出来谁拿到谁绑定。', kind: 'info' },
+  bound: { text: '已绑定：这张贴纸现在指向那辆车了。', kind: 'info' },
+  unbound: { text: '已解绑：这张贴纸变回空白，可以绑到别的车上。', kind: 'info' },
+  codedeleted: { text: '已删除该编号，这张贴纸作废。', kind: 'info' },
+  codefixed: {
+    text: '这个编号就是某辆车的编号，删不掉 —— 车还在，它就永远有效。想让它失效就解绑，或者停用那辆车。',
+    kind: 'error',
+  },
   needinfo: {
     text: '还没建成：至少要填「车牌」或一个号码，否则这张贴纸扫开什么都没有。',
     kind: 'error',
@@ -245,15 +253,98 @@ function createApp(options) {
     return core.sanitizePhone(car.call_number) || core.sanitizePhone(car.phone);
   }
 
+  /**
+   * 编号 → 车辆。
+   *
+   * 贴纸上印的是**编号**，不是车牌：编号先印出来，之后才绑定到某辆车。
+   * 所以这里返回三态：
+   *   - 编号存在且已绑定 → { code, car }
+   *   - 编号存在但没绑定 → { code, car: null }（页面提示「先去绑定」）
+   *   - 查不到           → null
+   *
+   * **回落**：编号表里查不到时，退一步把编号当作车辆编号查。
+   * 早期版本的贴纸印的就是车辆编号，这样已经贴出去的老贴纸永远有效，
+   * 不需要先把迁移跑完（D1 上更是不想为了兼容在请求里写库）。
+   */
+  async function resolveCode(code) {
+    const id = String(code || '');
+    if (!id) return null;
+
+    const entry = await store.getCode(id);
+    if (entry) {
+      if (!entry.car_id) return { code: entry.code, entry, car: null };
+      const car = await store.getCar(entry.car_id);
+      return { code: entry.code, entry, car };
+    }
+
+    const car = await store.getCar(id);
+    if (car) {
+      return {
+        code: id,
+        entry: { code: id, car_id: car.id, owner_id: car.owner_id, note: '', legacy: true },
+        car,
+      };
+    }
+    return null;
+  }
+
   async function handleScan(req, url, params) {
-    const car = await store.getCar(params[0]);
-    if (!car) {
+    const found = await resolveCode(params[0]);
+    if (!found) {
       return pageResponse(404, '挪车码不存在', '请确认二维码是否扫描完整，或联系车主索取新的贴纸。');
     }
+
+    // 还没绑定到任何车辆的空白贴纸：让车主就地绑定，别给扫码人一个 404
+    if (!found.car) {
+      const session = await currentSession(req);
+      const cars =
+        session && session.kind === 'user'
+          ? await store.listCarsByOwner(session.userId)
+          : [];
+      return htmlResponse(
+        200,
+        views.bindCodePage({
+          code: found.code,
+          cars,
+          loggedIn: Boolean(session),
+          home: homeFor(session),
+        })
+      );
+    }
+
+    const car = found.car;
     if (!car.enabled) {
       return pageResponse(403, '该挪车码已停用', '车主已关闭这个挪车码，暂时无法通过它联系车主。');
     }
     return htmlResponse(200, views.scanPage(car, { dialNumber: dialNumberOf(car) }));
+  }
+
+  /**
+   * 扫到空白贴纸后，车主当场把它绑到自己的车上。
+   * 权限：只能绑自己的车；贴纸本身也得是属于他的（或还没主）。
+   */
+  async function handleBindFromScan(req, url, params) {
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
+
+    const found = await resolveCode(params[0]);
+    if (!found) return pageResponse(404, '编号不存在', '请确认二维码是否扫描完整。');
+    if (found.car) return redirectResponse(`/c/${found.code}`);
+
+    const raw = core.parseForm(await req.readText());
+    const carId = String(raw.car_id || '');
+    const cars = session.kind === 'user' ? await store.listCarsByOwner(session.userId) : await store.listCars();
+    const car = cars.find((item) => item.id === carId);
+    if (!car) return pageResponse(403, '绑定失败', '这辆车不属于当前账号，或者已经被删除了。');
+
+    await store.createCode({
+      code: found.code,
+      car_id: car.id,
+      owner_id: session.kind === 'user' ? session.userId : car.owner_id || null,
+      note: '扫码绑定',
+    });
+    await store.bindCode(found.code, car.id, session.kind === 'user' ? session.userId : car.owner_id || null);
+    return redirectResponse(`/c/${found.code}`);
   }
 
   /**
@@ -336,7 +427,8 @@ function createApp(options) {
       /* 读失败也不影响记录 */
     }
 
-    const car = await store.getCar(params[0]);
+    const found = await resolveCode(params[0]);
+    const car = found && found.car;
     if (!car || !car.enabled || !dialNumberOf(car)) {
       return jsonResponse(404, { ok: false });
     }
@@ -557,6 +649,8 @@ function createApp(options) {
       account: isAdmin ? null : await store.getUser(session.userId),
       users,
       cars,
+      // 贴纸编号：管理员看全部，车主只看自己生成的
+      codes: isAdmin ? await store.listCodes(500) : await store.listCodesByOwner(session.userId, 500),
       messages: isAdmin
         ? await store.listMessages(100)
         : await store.listMessagesByOwner(session.userId, 100),
@@ -588,6 +682,7 @@ function createApp(options) {
         mode: data.isAdmin ? 'admin' : 'owner',
         account: data.account,
         cars: data.cars,
+        codes: data.codes,
         messages: data.messages,
         users: data.users,
         baseUrl: data.base,
@@ -631,6 +726,8 @@ function createApp(options) {
           ? '<a class="btn btn-sm btn-primary" href="/print-all" target="_blank" rel="noreferrer">批量打印全部贴纸</a>'
           : '',
         'car-list': views.carListHtml(data.cars, { baseUrl: data.base, isAdmin: data.isAdmin }),
+        'code-count': `贴纸编号（${data.codes.length}）`,
+        'code-area': views.codeListHtml(data.codes, { cars: data.cars, isAdmin: data.isAdmin }),
         'empty-warn': views.emptyWarnHtml(data.emptyCount),
         'record-area': views.recordListHtml(data.messages),
         'record-actions': views.recordActionsHtml(data.unread),
@@ -676,7 +773,9 @@ function createApp(options) {
   async function uniqueCarId() {
     for (let i = 0; i < 5; i++) {
       const id = core.randomCode(10);
-      if (!(await store.getCar(id))) return id;
+      // 也要避开已有编号：车辆编号本身就是一张贴纸的编号，
+      // 撞上别人没绑定的空白编号会让这辆车一创建就「指向别人的贴纸」
+      if (!(await store.getCar(id)) && !(await store.getCode(id))) return id;
     }
     throw new Error('无法生成唯一编号');
   }
@@ -696,16 +795,24 @@ function createApp(options) {
         : redirectResponse(`${homeFor(session)}?notice=needinfo`);
     }
 
-    await store.createCar(
-      Object.assign(
-        {
-          id: await uniqueCarId(),
-          // 车主建的归自己；平台方建的 owner_id 为空（属于平台自己录的车）
-          owner_id: session.kind === 'user' ? session.userId : null,
-        },
-        fields
-      )
+    const car = Object.assign(
+      {
+        id: await uniqueCarId(),
+        // 车主建的归自己；平台方建的 owner_id 为空（属于平台自己录的车）
+        owner_id: session.kind === 'user' ? session.userId : null,
+      },
+      fields
     );
+    await store.createCar(car);
+    // 每辆车天生带一张贴纸：编号就是车辆编号。
+    // 建车时就把这行写下来，后台的编号列表才从第一刻起就是完整的
+    // （老车由 db.js 启动时的迁移补齐，扫不到编号行时还有回落，见 resolveCode）。
+    await store.createCode({
+      code: car.id,
+      car_id: car.id,
+      owner_id: car.owner_id || null,
+      note: '随车辆创建',
+    });
     return afterChange(session, req, url, 'created');
   }
 
@@ -738,8 +845,184 @@ function createApp(options) {
     const session = await currentSession(req);
     const found = await loadCarFor(session, params[0]);
     if (found.error) return found.error;
+    // 先把这个车绑定的贴纸作废，再删车。
+    // 反过来（只删车）会让编号行变成「未绑定」，那张贴纸扫开又变成可绑定的空白贴纸 ——
+    // 车都没了，贴在它上面的码不该还活着。
+    await store.deleteCodesByCar(found.car.id);
     await store.deleteCar(found.car.id);
     return afterChange(session, req, url, 'deleted');
+  }
+
+  /* ---------------------------- 贴纸编号 ---------------------------- */
+
+  /**
+   * 一个新编号：不能和已有编号重复，也不能撞上某辆车的编号
+   * （车辆编号本身也是一个永远有效的码，撞了就会指向两辆车）。
+   */
+  async function uniqueCode() {
+    for (let i = 0; i < 5; i++) {
+      const code = core.randomCode(10);
+      if (!(await store.getCode(code)) && !(await store.getCar(code))) return code;
+    }
+    throw new Error('无法生成唯一编号');
+  }
+
+  /** 这个编号归不归当前账号：管理员随意；车主只能碰自己名下的编号 */
+  function codeBelongsTo(found, session) {
+    if (!found) return false;
+    if (session.kind === 'admin') return true;
+    const owner = found.entry.owner_id || (found.car ? found.car.owner_id : null);
+    return Boolean(owner) && owner === session.userId;
+  }
+
+  /**
+   * 老贴纸（编号 = 车辆编号）在编号表里可能还没有行。
+   * 要改它的绑定关系，就得先把这一行补出来 —— 否则改完一查，
+   * 又会从「车辆编号」那条回落路径找回原来的车，改了等于没改。
+   */
+  async function materializeCode(found) {
+    if (!found.entry.legacy) return;
+    await store.createCode({
+      code: found.code,
+      car_id: found.car ? found.car.id : null,
+      owner_id: found.entry.owner_id || null,
+      note: '',
+    });
+  }
+
+  /** 生成一批空白编号（未绑定），用于「先印一批，谁拿到谁绑定」 */
+  async function handleCreateCodes(req, url) {
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
+
+    const raw = core.parseForm(await req.readText());
+    const unparsable = unparsableResponse(req, raw);
+    if (unparsable) return unparsable;
+
+    const count = Math.max(1, Math.min(50, Math.floor(Number(raw.count) || 1)));
+    const note = core.truncate(String(raw.note || '').trim(), 60);
+    const ownerId = session.kind === 'user' ? session.userId : null;
+
+    for (let i = 0; i < count; i++) {
+      await store.createCode({ code: await uniqueCode(), owner_id: ownerId, note });
+    }
+    return afterChange(session, req, url, 'codes');
+  }
+
+  /** 把一张空白贴纸绑到某辆车上 */
+  async function handleBindCode(req, url, params) {
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
+
+    const found = await resolveCode(params[0]);
+    if (!found) return pageResponse(404, '编号不存在', '请确认二维码是否扫描完整。');
+    if (!codeBelongsTo(found, session)) {
+      return pageResponse(403, '绑定失败', '这个编号不属于当前账号。');
+    }
+
+    const raw = core.parseForm(await req.readText());
+    const cars =
+      session.kind === 'admin' ? await store.listCars() : await store.listCarsByOwner(session.userId);
+    const car = cars.find((item) => item.id === String(raw.car_id || ''));
+    if (!car) return pageResponse(403, '绑定失败', '这辆车不在当前账号下，或者已经被删除了。');
+
+    await materializeCode(found);
+    await store.bindCode(found.code, car.id, session.kind === 'admin' ? car.owner_id || null : session.userId);
+    return afterChange(session, req, url, 'bound');
+  }
+
+  async function handleUnbindCode(req, url, params) {
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
+
+    const found = await resolveCode(params[0]);
+    if (!found) return pageResponse(404, '编号不存在', '请确认二维码是否扫描完整。');
+    if (!codeBelongsTo(found, session)) {
+      return pageResponse(403, '解绑失败', '这个编号不属于当前账号。');
+    }
+
+    await materializeCode(found);
+    await store.unbindCode(found.code);
+    return afterChange(session, req, url, 'unbound');
+  }
+
+  async function handleDeleteCode(req, url, params) {
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
+
+    const found = await resolveCode(params[0]);
+    if (!found) return afterChange(session, req, url, 'codedeleted');
+    if (!codeBelongsTo(found, session)) {
+      return pageResponse(403, '删除失败', '这个编号不属于当前账号。');
+    }
+    // 车辆编号本身就是永久有效的码（resolveCode 会回落到车辆），删了也会「复活」。
+    // 与其骗用户，不如直接说清楚。
+    if (await store.getCar(found.code)) {
+      return wantsFragments(req)
+        ? jsonResponse(400, { ok: false, notice: NOTICES.codefixed.text, kind: NOTICES.codefixed.kind })
+        : redirectResponse(`${homeFor(session)}?notice=codefixed`);
+    }
+
+    await store.deleteCode(found.code);
+    return afterChange(session, req, url, 'codedeleted');
+  }
+
+  /** 打印某一编号的贴纸（空白的也能打，打出来就是一张待绑定的贴纸） */
+  async function handlePrintCode(req, url, params) {
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
+
+    const found = await resolveCode(params[0]);
+    if (!found) return pageResponse(404, '编号不存在', '请确认二维码是否扫描完整。');
+    if (!codeBelongsTo(found, session)) return redirectResponse('/login');
+
+    const base = baseUrlOf(req);
+    return htmlResponse(
+      200,
+      views.printPage(
+        { id: found.code, plate: found.car ? found.car.plate || '' : '' },
+        {
+          baseUrl: base,
+          qrSvg: qrSvgForContent(`${base}/c/${found.code}`),
+          size: stickerSize(url),
+          path: `/codes/${found.code}/print`,
+          code: found.code,
+          blank: !found.car,
+        }
+      )
+    );
+  }
+
+  /** 一次打完所有还没绑定的空白贴纸 */
+  async function handlePrintBlank(req, url) {
+    const session = await currentSession(req);
+    if (!session) return redirectResponse('/login');
+
+    const base = baseUrlOf(req);
+    const all =
+      session.kind === 'admin'
+        ? await store.listCodes(500)
+        : await store.listCodesByOwner(session.userId, 500);
+    const blank = all.filter((entry) => !entry.car_id);
+
+    if (!blank.length) {
+      return pageResponse(200, '没有待绑定的贴纸', '先在后台「贴纸编号」里生成一批空白编号。');
+    }
+
+    return htmlResponse(
+      200,
+      views.printAllPage({
+        cars: blank.map((entry) => ({
+          id: entry.code,
+          plate: entry.code,
+          qrSvg: qrSvgForContent(`${base}/c/${entry.code}`),
+        })),
+        baseUrl: base,
+        size: stickerSize(url),
+        path: '/print-blank',
+        blank: true,
+      })
+    );
   }
 
   /** 通用二维码只服务平台方自己录的车（owner_id 为空），不碰车主的车 */
@@ -873,6 +1156,8 @@ function createApp(options) {
     ['GET', /^\/m\/?$/, handleUniversalScan],
     ['GET', new RegExp(`^/c/${ID}$`), handleScan],
     ['POST', new RegExp(`^/c/${ID}/call$`), handlePostCall],
+    // 扫到一张还没绑定的空白贴纸时，车主就地绑定
+    ['POST', new RegExp(`^/c/${ID}/bind$`), handleBindFromScan],
 
     // 单辆车的管理链接：给别人用，不需要登录，也看不到别的车
     ['GET', new RegExp(`^/edit/${TOKEN}$`), handleCarEditPage],
@@ -904,6 +1189,13 @@ function createApp(options) {
     ['POST', new RegExp(`^/cars/${ID}/delete$`), handleDeleteCar],
     ['GET', new RegExp(`^/cars/${ID}/qr\\.svg$`), handleQrSvg],
     ['GET', new RegExp(`^/cars/${ID}/print$`), handlePrint],
+    // 贴纸编号：先生成一批空白，谁拿到谁绑定；绑定关系随时可改
+    ['POST', /^\/codes$/, handleCreateCodes],
+    ['POST', new RegExp(`^/codes/${ID}/bind$`), handleBindCode],
+    ['POST', new RegExp(`^/codes/${ID}/unbind$`), handleUnbindCode],
+    ['POST', new RegExp(`^/codes/${ID}/delete$`), handleDeleteCode],
+    ['GET', new RegExp(`^/codes/${ID}/print$`), handlePrintCode],
+    ['GET', /^\/print-blank$/, handlePrintBlank],
     ['POST', /^\/messages\/(\d{1,12})\/read$/, handleMarkRead],
     ['POST', /^\/messages\/read-all$/, handleMarkAllRead],
 

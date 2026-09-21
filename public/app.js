@@ -46,6 +46,8 @@
     'empty-warn',
     'record-area',
     'record-actions',
+    'code-count',
+    'code-area',
     'user-count',
     'user-area',
   ];
@@ -69,8 +71,26 @@
     }
   }
 
+  function openGroupIndexes(scope) {
+    // 「待绑定 / 已绑定」这两组也按展开状态记住，否则绑定一条之后列表整个收起来，
+    // 用户还得再点一下才能看到结果
+    var lists = scope.querySelectorAll('details.code-group');
+    var open = [];
+    for (var i = 0; i < lists.length; i++) if (lists[i].open) open.push(i);
+    return open;
+  }
+
+  function restoreOpenGroups(scope, indexes) {
+    var lists = scope.querySelectorAll('details.code-group');
+    for (var i = 0; i < indexes.length; i++) {
+      if (lists[indexes[i]]) lists[indexes[i]].open = true;
+    }
+  }
+
   function applyFragments(payload) {
     var opened = openEditIds();
+    var codeArea = document.getElementById('code-area');
+    var openedGroups = codeArea ? openGroupIndexes(codeArea) : [];
     var html = payload.html || {};
     for (var i = 0; i < FRAGMENT_IDS.length; i++) {
       var id = FRAGMENT_IDS[i];
@@ -79,6 +99,7 @@
       if (el) el.innerHTML = html[id];
     }
     restoreOpenEdits(opened);
+    if (codeArea) restoreOpenGroups(codeArea, openedGroups);
 
     var badge = document.getElementById('unread-badge');
     if (badge && typeof payload.unread === 'number') {

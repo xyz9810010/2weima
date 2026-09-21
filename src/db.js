@@ -109,7 +109,42 @@ function createStore(dataDir) {
     `),
     markRead: db.prepare('UPDATE messages SET read_at = ? WHERE id = ? AND read_at IS NULL'),
     markAllRead: db.prepare('UPDATE messages SET read_at = ? WHERE read_at IS NULL'),
+
+    /* ---------------------------- 贴纸编号 ---------------------------- */
+
+    getCode: db.prepare('SELECT * FROM codes WHERE code = ?'),
+    listCodes: db.prepare(`
+      SELECT codes.*, cars.plate AS plate, cars.enabled AS car_enabled, users.contact AS owner_contact
+      FROM codes
+      LEFT JOIN cars ON cars.id = codes.car_id
+      LEFT JOIN users ON users.id = codes.owner_id
+      ORDER BY codes.created_at DESC
+      LIMIT ?
+    `),
+    listCodesByOwner: db.prepare(`
+      SELECT codes.*, cars.plate AS plate, cars.enabled AS car_enabled
+      FROM codes LEFT JOIN cars ON cars.id = codes.car_id
+      WHERE codes.owner_id = ?
+      ORDER BY codes.created_at DESC
+      LIMIT ?
+    `),
+    insertCode: db.prepare(`
+      INSERT OR IGNORE INTO codes (code, car_id, owner_id, note, created_at, bound_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `),
+    bindCode: db.prepare('UPDATE codes SET car_id = ?, bound_at = ?, owner_id = ? WHERE code = ?'),
+    unbindCode: db.prepare('UPDATE codes SET car_id = NULL, bound_at = NULL WHERE code = ?'),
+    deleteCode: db.prepare('DELETE FROM codes WHERE code = ?'),
+    deleteCodesByCar: db.prepare('DELETE FROM codes WHERE car_id = ?'),
+    // 历史的「车辆编号」补成编号行：不跑也能扫码（resolveCode 有回落），跑了后台列表才完整
+    adoptLegacyCodes: db.prepare(`
+      INSERT OR IGNORE INTO codes (code, car_id, owner_id, note, created_at, bound_at)
+      SELECT id, id, owner_id, '', created_at, created_at FROM cars
+    `),
   };
+
+  // 启动时补一次历史编号：幂等，几毫秒的事，省得线上还要记得手动跑迁移
+  stmt.adoptLegacyCodes.run();
 
   /* ---------------------- 登录限流（进程内滑动窗口） ------------------- */
 
@@ -275,6 +310,59 @@ function createStore(dataDir) {
 
     async bumpRateLimit(bucket, windowMs, limit) {
       return bumpRateLimit(bucket, windowMs, limit);
+    },
+
+    /* ------------------------------ 贴纸编号 ------------------------------ */
+
+    async getCode(code) {
+      return stmt.getCode.get(String(code)) || null;
+    },
+
+    async listCodes(limit) {
+      return stmt.listCodes.all(Number(limit) || 500);
+    },
+
+    async listCodesByOwner(ownerId, limit) {
+      return stmt.listCodesByOwner.all(String(ownerId), Number(limit) || 500);
+    },
+
+    async createCode(entry) {
+      stmt.insertCode.run(
+        entry.code,
+        entry.car_id || null,
+        entry.owner_id || null,
+        entry.note || '',
+        Date.now(),
+        entry.car_id ? Date.now() : null
+      );
+      return stmt.getCode.get(entry.code) || null;
+    },
+
+    /**
+     * 绑定同时决定归属：谁把这张贴纸绑到车上，编号就归谁。
+     * 否则「甲生成的空白贴纸被乙绑定」之后，甲还能在后台把它解绑 —— 跨租户漏洞。
+     */
+    async bindCode(code, carId, ownerId) {
+      return (
+        stmt.bindCode.run(carId || null, carId ? Date.now() : null, ownerId || null, String(code)).changes > 0
+      );
+    },
+
+    async unbindCode(code) {
+      return stmt.unbindCode.run(String(code)).changes > 0;
+    },
+
+    async deleteCode(code) {
+      return stmt.deleteCode.run(String(code)).changes > 0;
+    },
+
+    /** 删车时把它的贴纸一起作废：车没了，贴在车上的码也该失效（不再「复活」成空白贴纸） */
+    async deleteCodesByCar(carId) {
+      return stmt.deleteCodesByCar.run(String(carId)).changes;
+    },
+
+    async adoptLegacyCodes() {
+      return stmt.adoptLegacyCodes.run().changes;
     },
   };
 }

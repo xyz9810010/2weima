@@ -894,7 +894,167 @@ async function run() {
     }
   }
 
-  section('16. 布局：长列表和长说明不能把页面撑爆');
+  section('16. 贴纸编号：一批空白贴纸，谁拿到谁绑定，绑定关系可改');
+  {
+    // 独立 Cookie jar，用来演「另一个车主」
+    function newClient() {
+      let jar = '';
+      const call = async (method, path, form) => {
+        const headers = {};
+        if (jar) headers.cookie = jar;
+        let body;
+        if (form) {
+          body = new URLSearchParams(form).toString();
+          headers['content-type'] = 'application/x-www-form-urlencoded';
+        }
+        const res = await fetch(BASE + path, { method, headers, body, redirect: 'manual' });
+        for (const raw of (res.headers.getSetCookie ? res.headers.getSetCookie() : [])) {
+          if (!/;\s*Secure/i.test(raw)) jar = raw.split(';')[0];
+        }
+        return { status: res.status, location: res.headers.get('location') || '', text: await res.text() };
+      };
+      return { get: (p) => call('GET', p), post: (p, f) => call('POST', p, f) };
+    }
+
+    const codesIn = (html) =>
+      [...new Set((html.match(/<code class="code-id">[A-Za-z0-9_-]{1,40}<\/code>/g) || []).map((s) => s.replace(/<[^>]+>/g, '')))];
+    const heroPlate = (html) => (/<div class="hero-plate[^"]*">([^<]+)<\/div>/.exec(html) || [])[1] || '';
+
+    // 平台方先建一辆车（老贴纸就是「编号 = 车辆编号」那种）
+    const before = await get('/admin');
+    const knownCars = new Set((before.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)));
+    await post('/cars', {
+      plate: '沪E·33333', owner_name: '平台', phone: '13800000031', call_number: '', note: '', enabled: 'on',
+    });
+    const withCar = await get('/admin');
+    const carId = [...new Set((withCar.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)))].find(
+      (c) => !knownCars.has(c)
+    );
+    check('平台方建了一辆用于编号测试的车 ' + carId, Boolean(carId));
+
+    check('【兼容】老的车辆编号仍能扫开', (await get(`/c/${carId}`, { auth: false })).status === 200);
+    check(
+      '【兼容】老编号在后台编号列表里有自己的一行（迁移生效）',
+      withCar.text.includes(`<code class="code-id">${carId}</code>`)
+    );
+
+    const gen = await post('/codes', { count: '3', note: '测试批次' });
+    check('生成 3 个空白编号 = 302', gen.status === 302, gen.status);
+
+    const page = await get('/admin');
+    const beforeCodes = new Set(codesIn(before.text));
+    const blanks = codesIn(page.text).filter((c) => !beforeCodes.has(c) && c !== carId);
+    check(`生成后新增了 ${blanks.length} 个空白编号`, blanks.length === 3, blanks.join(','));
+    check('后台把它们归到「待绑定」', page.text.includes('待绑定（') && page.text.includes(blanks[0]));
+
+    const blank = blanks[0];
+
+    const scanBlank = await get(`/c/${blank}`, { auth: false });
+    check(
+      '空白贴纸扫开 = 200 且提示还没绑定（不是 404）',
+      scanBlank.status === 200 && scanBlank.text.includes('这张贴纸还没绑定车辆'),
+      scanBlank.status
+    );
+    check('空白贴纸页给未登录的人一个登录入口', scanBlank.text.includes('我是车主，登录后绑定'));
+    check('【隐私】空白贴纸页不泄露任何车牌', !scanBlank.text.includes('沪E·33333'));
+
+    const anonBind = await post(`/c/${blank}/bind`, { car_id: carId }, { auth: false });
+    check('未登录不能绑定（跳登录页）', anonBind.status === 302 && anonBind.location === '/login', anonBind.location);
+
+    // 车主丙 = 复用第 9 节注册好的「车主甲」（同一 IP 的注册额度有限，这里只登录）
+    const c = newClient();
+    const loginC = await c.post('/login', { contact: '13800000001', password: 'password-aaa' });
+    check('车主甲登录成功', loginC.status === 302 && loginC.location === '/me', loginC.location);
+    await c.post('/cars', { plate: '甲A·33333', owner_name: '甲', phone: '13800000001', call_number: '', note: '', enabled: 'on' });
+    await c.post('/cars', { plate: '甲A·44444', owner_name: '甲', phone: '13800000001', call_number: '', note: '', enabled: 'on' });
+    const meC = await c.get('/me');
+    const cCars = [...new Set((meC.text.match(/\/c\/([A-Za-z0-9_-]{10})/g) || []).map((s) => s.slice(3)))];
+    check(`车主甲名下有两辆车`, cCars.length === 2, cCars.join(','));
+    check('【隔离】车主甲看不到平台方的编号', !codesIn(meC.text).includes(carId), '串号了');
+
+    await c.post('/codes', { count: '1' });
+    const meC2 = await c.get('/me');
+    const codeC = codesIn(meC2.text).find((x) => !cCars.includes(x));
+    check('拿到车主甲自己生成的空白编号 ' + codeC, Boolean(codeC));
+
+    // 绑定 → 改绑 → 解绑，全程只改「编号 ↔ 车」这一条关系
+    const bind1 = await c.post(`/codes/${codeC}/bind`, { car_id: cCars[0] });
+    check('车主甲把贴纸绑到自己的车 = 302', bind1.status === 302, bind1.status);
+    const p1 = heroPlate((await c.get(`/c/${codeC}`, { auth: false })).text);
+
+    await c.post(`/codes/${codeC}/bind`, { car_id: cCars[1] });
+    const p2 = heroPlate((await c.get(`/c/${codeC}`, { auth: false })).text);
+    check(
+      `改绑后扫开的是另一辆车（${p1 || '空'} → ${p2 || '空'}）`,
+      Boolean(p1 && p2) && p1 !== p2 && [p1, p2].every((p) => p.includes('甲A·'))
+    );
+
+    const unbind = await c.post(`/codes/${codeC}/unbind`);
+    check('解绑 = 302', unbind.status === 302, unbind.status);
+    const scanUnbound = await c.get(`/c/${codeC}`, { auth: false });
+    check(
+      '解绑后扫开又变回「还没绑定」',
+      scanUnbound.status === 200 && scanUnbound.text.includes('这张贴纸还没绑定车辆')
+    );
+
+    // 扫一张平台方的空白贴纸，当场绑到甲自己的车（谁拿到谁绑定）
+    const scanBind = await c.post(`/c/${blanks[1]}/bind`, { car_id: cCars[0] });
+    check(
+      '扫码绑定：谁拿到谁绑定，绑完回到扫码页',
+      scanBind.status === 302 && scanBind.location === `/c/${blanks[1]}`,
+      scanBind.location
+    );
+    const meC3 = await c.get('/me');
+    check('绑定后这张贴纸出现在甲的后台', codesIn(meC3.text).includes(blanks[1]));
+    const adminAfterBind = await get('/admin');
+    check(
+      '【归属】绑定后编号归了甲：平台方的列表里它挂在甲名下',
+      adminAfterBind.text.includes(blanks[1]) && adminAfterBind.text.includes('13800000001')
+    );
+
+    // 越权：车主乙
+    const d = newClient();
+    const loginD = await d.post('/login', { contact: '13800000002', password: 'password-bbb' });
+    check('车主乙登录成功', loginD.status === 302, loginD.location);
+    await d.post('/cars', { plate: '乙B·55555', owner_name: '乙', phone: '13800000002', call_number: '', note: '', enabled: 'on' });
+    const meD = await d.get('/me');
+    const carD = (meD.text.match(/\/c\/([A-Za-z0-9_-]{10})/) || [])[1];
+    check('车主乙有自己的车 ' + carD, Boolean(carD));
+
+    check('【隔离】乙不能解绑甲的编号', (await d.post(`/codes/${codeC}/unbind`)).status === 403);
+    check('【隔离】乙不能删除甲的编号', (await d.post(`/codes/${codeC}/delete`)).status === 403);
+    check('【隔离】乙不能把甲的编号绑到自己的车', (await d.post(`/codes/${codeC}/bind`, { car_id: carD })).status === 403);
+    check('【隔离】甲不能把编号绑到平台方的车', (await c.post(`/codes/${codeC}/bind`, { car_id: carId })).status === 403);
+    check('【隔离】乙打不开甲的贴纸打印页', (await d.get(`/codes/${codeC}/print`)).status === 302);
+    check('【隔离】乙的后台里没有甲的编号', !codesIn((await d.get('/me')).text).includes(codeC));
+
+    // 「编号 = 车辆编号」删不掉：车辆还在，它就永远有效（删了会从回落路径「复活」）
+    const delCarCode = await post(`/codes/${carId}/delete`);
+    check(
+      '车辆编号不允许删除，并跳回去解释原因',
+      delCarCode.status === 302 && delCarCode.location.includes('notice=codefixed'),
+      `${delCarCode.status} ${delCarCode.location}`
+    );
+
+    // 打印
+    const printCode = await get(`/codes/${blank}/print`);
+    check(
+      '空白编号的打印页 = 200，二维码就指向这个编号',
+      printCode.status === 200 && printCode.text.includes(`/c/${blank}`),
+      printCode.status
+    );
+    check('空白贴纸的打印说明写明「还没绑定」', printCode.text.includes('空白贴纸') && printCode.text.includes('还没绑定'));
+    const printBlank = await get('/print-blank');
+    check(
+      '批量打印空白贴纸 = 200 且把待绑定编号排进去了',
+      printBlank.status === 200 &&
+        printBlank.text.includes('批量打印空白贴纸') &&
+        (printBlank.text.match(/sticker-url">[A-Za-z0-9_-]{10}</g) || []).length >= 1,
+      printBlank.status
+    );
+  }
+
+  section('17. 布局：长列表和长说明不能把页面撑爆');
   {
     // 记录是只增不减的：以前 20 条就把后台撑到 5.4 屏，这里造出 >10 条来验证封顶
     const before = await get('/admin');
@@ -931,7 +1091,7 @@ async function run() {
     }
   }
 
-  section('17. 会话与越权');
+  section('18. 会话与越权');
   check('登出 = 302', (await post('/logout')).location === '/login');
   check('登出后后台跳登录页', (await get('/admin')).location === '/login');
   const anon = await post('/cars', { plate: '伪造' }, { auth: false });
