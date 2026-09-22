@@ -795,6 +795,42 @@ async function run() {
     check('去掉移动端 300ms 点击延迟', css.includes('touch-action: manipulation'));
     check('适配 iPhone 安全区', css.includes('safe-area-inset'));
     check('深色模式有独立取值', css.includes('prefers-color-scheme: dark'));
+    // 深色模式最容易出两类事：浅色面板没跟着变（浅字压浅底，等于看不见）、
+    // 主按钮在亮色底上还用白字（对比度只有 3.68）。
+    {
+      const darkBlock = css.slice(css.indexOf('@media (prefers-color-scheme: dark)'));
+      check(
+        '深色模式主按钮换成深墨（亮蓝底 + 白字只有 3.68）',
+        /--primary-ink: #0b1220/.test(darkBlock),
+        '深色下主按钮对比度不达标'
+      );
+      check(
+        '深色模式覆盖了浅色面板 token（--soft / --code-bg）',
+        /--soft: #/.test(darkBlock) && /--code-bg: #/.test(darkBlock),
+        '卡片里的浅色凹槽在深色下会变成浅字压浅底'
+      );
+      check('深色模式把危险色换成浅红、并给了配套深墨', /--danger: #f87171/.test(darkBlock) && /--danger-ink:/.test(darkBlock));
+      check(
+        '管理链接框 / 编辑链接 / 选车牌项都不再硬编码浅色底',
+        !/\.car-share \{[\s\S]{0,120}background: #fafbfe/.test(css) &&
+          !/\.edit-link \{[\s\S]{0,120}background: #fff;/.test(css) &&
+          !/\.pick-item \{[\s\S]{0,140}background: #fff;/.test(css)
+      );
+      check('次要文字 token 压暗到达标（浅色 #5f6b7a）', /--muted: #5f6b7a/.test(css), '原 #6b7280 在 --bg 上只有 4.43');
+    }
+    check(
+      '【关键】贴纸永远白底黑字（深色模式不能影响打印）',
+      /\.sticker \{[\s\S]{0,200}background: #fff;[\s\S]{0,60}color: #000;/.test(css),
+      '贴纸跟着深色模式变黑底就全废了'
+    );
+    check(
+      '【关键】纸张预览永远是白纸',
+      /\.paper \{[\s\S]{0,200}background: #fff;/.test(css)
+    );
+    check(
+      '贴纸框外那行小字用固定深灰（它永远在白纸上）',
+      /\.sticker-url \{[\s\S]{0,120}color: #6b6b6b/.test(css)
+    );
     check('触摸目标有统一下限', css.includes('--tap-min'));
     check('间距用统一的节奏变量', css.includes('--sp-1') && css.includes('--sp-4'));
 

@@ -4,19 +4,30 @@
   --bg: #f4f5f7;
   --card: #ffffff;
   --text: #16181d;
-  --muted: #6b7280;
+  /* 次要文字：#6b7280 在 --bg 上只有 4.43，差一点不到 AA 的 4.5，压暗一档 */
+  --muted: #5f6b7a;
   --line: #e5e7eb;
   --primary: #2563eb;
   --primary-ink: #ffffff;
+  /* 主色描边（通用码卡片） */
+  --primary-line: #c7d7f5;
   --call: #047857;
   --call-strong: #065f46;
   --call-ink: #ffffff;
-  --danger: #dc2626;
+  --danger: #c02626;
+  --danger-ink: #ffffff;
+  --warn-text: #b45309;
   --warn-bg: #fef2f2;
   --warn-line: #fecaca;
   --info-bg: #eff6ff;
   --info-line: #bfdbfe;
   --ok-bg: #ecfdf5;
+  /* 卡片内部的「凹槽」面：管理链接框、选车牌项、打印说明卡 */
+  --soft: #f7f9fc;
+  --soft-line: #e2e6ee;
+  /* 等宽网址块 */
+  --code-bg: #ffffff;
+  --code-line: #e6eaf2;
   --radius: 16px;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.06);
 
@@ -42,14 +53,24 @@
     --muted: #9aa1ad;
     --line: #262b35;
     --primary: #3b82f6;
+    /* 深色下主按钮底是亮蓝，字必须换成深墨：白字压亮蓝只有 3.68，不达 AA */
+    --primary-ink: #0b1220;
+    --primary-line: #1e3a5f;
     --call: #059669;
     --call-strong: #10b981;
     --call-ink: #04120d;
+    --danger: #f87171;
+    --danger-ink: #2a0b0b;
+    --warn-text: #fbbf24;
     --warn-bg: #2a1517;
     --warn-line: #5b2429;
     --info-bg: #131f33;
     --info-line: #1e3a5f;
     --ok-bg: #10231b;
+    --soft: #1c2129;
+    --soft-line: #333b49;
+    --code-bg: #11141a;
+    --code-line: #2b323e;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
     --focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.5);
   }
@@ -1012,7 +1033,8 @@ textarea:focus {
 
 .toast-error {
   background: var(--danger);
-  color: #fff;
+  /* 深色模式下 --danger 是浅红，白字在上面只有 2.77，得换成深墨 */
+  color: var(--danger-ink);
 }
 
 .toast-out {
@@ -1214,7 +1236,7 @@ textarea:focus {
   flex-wrap: wrap;
   gap: 6px;
   font-size: 13px;
-  color: #4b5563;
+  color: var(--muted);
   /* 「尺寸：」这三个字不能被拆成两行（手机上窄，flex 会把文本节点当独立项挤） */
   white-space: nowrap;
 }
@@ -1225,7 +1247,7 @@ textarea:focus {
   margin-top: 6px;
   font-size: 12px;
   line-height: 1.5;
-  color: #6b7280;
+  color: var(--muted);
   max-width: 34em;
 }
 
@@ -1234,9 +1256,9 @@ textarea:focus {
 .car-share {
   margin-top: 12px;
   padding: 12px 14px;
-  border: 1px dashed #d6ddea;
+  border: 1px dashed var(--soft-line);
   border-radius: 10px;
-  background: #fafbfe;
+  background: var(--soft);
 }
 
 .car-share-head {
@@ -1251,8 +1273,8 @@ textarea:focus {
   display: block;
   margin: 8px 0 6px;
   padding: 7px 9px;
-  background: #fff;
-  border: 1px solid #e6eaf2;
+  background: var(--code-bg);
+  border: 1px solid var(--code-line);
   border-radius: 6px;
   font-size: 12px;
   word-break: break-all;
@@ -1272,7 +1294,7 @@ textarea:focus {
   flex-wrap: wrap;
   gap: 10px;
   padding: 10px 0;
-  border-bottom: 1px solid #eef1f6;
+  border-bottom: 1px solid var(--line);
   font-size: 13px;
 }
 
@@ -1285,22 +1307,23 @@ textarea:focus {
 }
 
 .user-name {
-  color: #6b7280;
+  color: var(--muted);
 }
 
 .user-cars {
   margin-left: auto;
-  color: #2563eb;
+  color: var(--primary);
 }
 
 .user-time {
-  color: #9ca3af;
+  color: var(--muted);
   font-size: 12px;
 }
 
 .sticker-url {
   font-size: 7pt;
-  color: #777;
+  /* 这行永远印在白纸上（贴纸框外的对号标签），所以固定用深灰，不能跟着深色模式变浅 */
+  color: #6b6b6b;
   word-break: break-all;
 }
 
@@ -1359,8 +1382,8 @@ textarea:focus {
   max-width: 198mm;
   margin: 0 auto 12px;
   padding: 12px 16px;
-  background: #f8fafc;
-  border: 1px solid var(--line);
+  background: var(--soft);
+  border: 1px solid var(--soft-line);
   border-radius: 12px;
 }
 
@@ -1368,7 +1391,7 @@ textarea:focus {
   margin: 0;
   font-size: 13px;
   line-height: 1.6;
-  color: #475569;
+  color: var(--muted);
   /* 网址很长：按词断行，别一个字符一个字符硬拆 */
   overflow-wrap: break-word;
 }
@@ -1390,16 +1413,16 @@ textarea:focus {
   align-items: center;
   gap: 10px;
   padding: 16px 18px;
-  border: 1px solid #e2e6ee;
+  border: 1px solid var(--soft-line);
   border-radius: 12px;
-  background: #fff;
+  background: var(--card);
   text-decoration: none;
   color: inherit;
 }
 
 .pick-item:hover {
-  border-color: #b9c6de;
-  background: #f7f9fc;
+  border-color: var(--primary);
+  background: var(--soft);
 }
 
 .pick-plate {
@@ -1410,25 +1433,25 @@ textarea:focus {
 
 .pick-owner {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--muted);
 }
 
 .pick-warn {
   margin-left: auto;
   font-size: 12px;
-  color: #b45309;
+  color: var(--warn-text);
 }
 
 .hero-sub {
   font-size: 13px;
-  color: #4b5563;
+  color: var(--muted);
   margin-top: 6px;
 }
 
 /* 后台顶部的通用码卡片稍微强调一下 */
 
 .card-universal {
-  border: 1px solid #c7d7f5;
+  border: 1px solid var(--primary-line);
   box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
 }
 
