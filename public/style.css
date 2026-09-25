@@ -171,9 +171,11 @@ summary,
   border: 0;
 }
 
-/* 跳到主要内容：长页面（后台）键盘用户的第一站 */
+/* 跳到主要内容：长页面（后台）键盘用户的第一站。
+   用 fixed 而不是 absolute：用户从页面中部按 Tab 时，absolute 会停在
+   文档顶部（视口外）导致焦点拿了却看不见；fixed 始终相对视口。 */
 .skip-link {
-  position: absolute;
+  position: fixed;
   left: var(--sp-3);
   top: -48px;
   z-index: 200;
@@ -188,6 +190,21 @@ summary,
 
 .skip-link:focus-visible {
   top: 0;
+  /* 焦点环若用 --primary 会与蓝底同色等于没有：白色内环压边才看得见 */
+  outline: 3px solid #ffffff;
+  outline-offset: -3px;
+}
+
+/* 跳转锚点避开吸顶栏：skip-link 跳到 #main 时，内容不被顶栏盖住 */
+#main {
+  scroll-margin-top: 64px;
+}
+
+/* 用户没开「减少动态效果」时，锚点跳转才平滑滚动 */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 /* 系统开了「减少动态效果」就不要再做过渡 */
@@ -629,6 +646,10 @@ code {
   font-size: 13px;
   color: var(--muted);
   min-width: 0;
+  /* 「的车」不能被换行拆到下一行；超长称呼用省略号收尾 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pick-warn {

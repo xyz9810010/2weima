@@ -179,7 +179,7 @@ function pickCarPage(cars) {
     .map(
       (car) => `<a class="pick-item" href="/c/${esc(car.id)}">
       <span class="pick-plate" translate="no">${esc(car.plate)}</span>
-      ${car.owner_name ? `<span class="pick-owner">${esc(car.owner_name)} 的车</span>` : ''}
+      ${car.owner_name ? `<span class="pick-owner">${esc(car.owner_name)}的车</span>` : ''}
       ${car.hasNumber ? '' : '<span class="pick-warn">暂未留电话</span>'}
     </a>`
     )
