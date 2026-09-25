@@ -230,7 +230,7 @@ function carEditPage({ car, token, dialNumber, notice }) {
     <p class="hint">改完立刻生效。<b>贴纸不用重印</b> —— 二维码里只有网址，车牌和号码是扫码时现查的。</p>
     <div class="btn-row">
       <a class="btn btn-sm btn-ghost" href="/c/${esc(car.id)}" target="_blank" rel="noreferrer">预览扫码页</a>
-      <a class="btn btn-sm btn-ghost" href="/edit/${esc(token)}/print" target="_blank" rel="noreferrer">打印贴纸</a>
+      <a class="btn btn-sm btn-ghost" href="/edit/${esc(token)}/print">打印贴纸</a>
     </div>
   </section>
 </main>`,
@@ -447,7 +447,7 @@ function carCard(car, { baseUrl, qrSvg, ownerLabel }) {
       <p class="scan-url" translate="no">${esc(scanUrl)}</p>
       <div class="btn-row">
         <a class="btn btn-sm btn-ghost" href="/c/${esc(car.id)}" target="_blank" rel="noreferrer">预览</a>
-        <a class="btn btn-sm btn-ghost" href="/cars/${esc(car.id)}/print" target="_blank" rel="noreferrer">打印贴纸</a>
+        <a class="btn btn-sm btn-ghost" href="/cars/${esc(car.id)}/print">打印贴纸</a>
         <a class="btn btn-sm btn-ghost" href="/cars/${esc(car.id)}/qr.svg?download=1">下载 SVG</a>
       </div>
       <p class="hint">
@@ -606,7 +606,7 @@ function codeRowHtml(entry, { cars, isAdmin }) {
         : '<span class="hint">先添加一辆车</span>'
     }
     <span class="code-ops">
-      <a class="btn btn-xs btn-ghost" href="/codes/${esc(entry.code)}/print" target="_blank" rel="noreferrer">打印</a>
+      <a class="btn btn-xs btn-ghost" href="/codes/${esc(entry.code)}/print">打印</a>
       <form method="post" action="/codes/${esc(entry.code)}/delete" data-remote
             data-confirm="删除编号 ${esc(entry.code)}？这张贴纸作废，别人扫开就找不到车了。">
         <button class="btn btn-xs btn-ghost" type="submit">删除</button>
@@ -620,7 +620,7 @@ function codeRowHtml(entry, { cars, isAdmin }) {
     <span class="badge ${entry.car_enabled === 0 ? 'badge-off' : 'badge-on'}" translate="no">${esc(plate)}</span>
     ${isAdmin && entry.owner_contact ? `<span class="muted code-owner">${esc(entry.owner_contact)}</span>` : ''}
     <span class="code-ops">
-      <a class="btn btn-xs btn-ghost" href="/codes/${esc(entry.code)}/print" target="_blank" rel="noreferrer">打印</a>
+      <a class="btn btn-xs btn-ghost" href="/codes/${esc(entry.code)}/print">打印</a>
       <form method="post" action="/codes/${esc(entry.code)}/unbind" data-remote>
         <button class="btn btn-xs btn-ghost" type="submit">解绑</button>
       </form>
@@ -758,7 +758,7 @@ function adminPage({
       <div class="car-actions">
         <p class="scan-url" translate="no">${esc(universal.url)}</p>
         <div class="btn-row">
-          <a class="btn btn-sm btn-ghost" href="/admin/print-universal" target="_blank" rel="noreferrer">打印通用贴纸</a>
+          <a class="btn btn-sm btn-ghost" href="/admin/print-universal">打印通用贴纸</a>
           <a class="btn btn-sm btn-ghost" href="/admin/universal.svg?download=1">下载 SVG</a>
           <a class="btn btn-sm btn-ghost" href="/" target="_blank" rel="noreferrer">预览</a>
         </div>
@@ -815,7 +815,7 @@ function adminPage({
     <div class="card-head">
       <h2 class="card-title" id="car-count">${carCountHtml(cars.length)}</h2>
       <div id="car-actions">
-        ${cars.length ? `<a class="btn btn-sm btn-primary" href="/print-all" target="_blank" rel="noreferrer">批量打印全部贴纸</a>` : ''}
+        ${cars.length ? `<a class="btn btn-sm btn-primary" href="/print-all">批量打印全部贴纸</a>` : ''}
       </div>
     </div>
     <p class="hint"><b>一车一码</b>：每辆车有自己的码，扫码直接进那一辆，扫码人不用选。</p>

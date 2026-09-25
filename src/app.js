@@ -723,7 +723,7 @@ function createApp(options) {
         'notice-area': notice ? views.bannerHtml(notice.text, notice.kind) : '',
         'car-count': views.carCountHtml(data.cars.length),
         'car-actions': data.cars.length
-          ? '<a class="btn btn-sm btn-primary" href="/print-all" target="_blank" rel="noreferrer">批量打印全部贴纸</a>'
+          ? '<a class="btn btn-sm btn-primary" href="/print-all">批量打印全部贴纸</a>'
           : '',
         'car-list': views.carListHtml(data.cars, { baseUrl: data.base, isAdmin: data.isAdmin }),
         'code-count': views.codeCountHtml(data.codes.length),
