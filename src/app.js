@@ -721,17 +721,17 @@ function createApp(options) {
       notice: notice ? { text: notice.text, kind: notice.kind } : null,
       html: {
         'notice-area': notice ? views.bannerHtml(notice.text, notice.kind) : '',
-        'car-count': `车辆与贴纸（${data.cars.length}）`,
+        'car-count': views.carCountHtml(data.cars.length),
         'car-actions': data.cars.length
           ? '<a class="btn btn-sm btn-primary" href="/print-all" target="_blank" rel="noreferrer">批量打印全部贴纸</a>'
           : '',
         'car-list': views.carListHtml(data.cars, { baseUrl: data.base, isAdmin: data.isAdmin }),
-        'code-count': `贴纸编号（${data.codes.length}）`,
+        'code-count': views.codeCountHtml(data.codes.length),
         'code-area': views.codeListHtml(data.codes, { cars: data.cars, isAdmin: data.isAdmin }),
         'empty-warn': views.emptyWarnHtml(data.emptyCount),
         'record-area': views.recordListHtml(data.messages),
         'record-actions': views.recordActionsHtml(data.unread),
-        'user-count': `车主账号（${data.users.length}）`,
+        'user-count': views.userCountHtml(data.users.length),
         'user-area': views.userListHtml(data.users),
       },
       unread: data.unread,

@@ -1,37 +1,67 @@
-/* 挪车码 · 样式表（无外部依赖） */
+/* 挪车码 · 样式表（无外部依赖）
+   设计语言：「泊流 The Berth Current」—— 见 design/algorithmic-philosophy.md
+   生成艺术以静态切片融入：点阵网格（.tide）、定位灯塔（品牌记号）、车道虚线、涟漪弧线。
+   硬约定：
+   - 不引外部字体/脚本/样式（CSP default-src 'none'）
+   - 颜色只走 :root 语义 token，深色模式只覆盖 token
+   - 贴纸与纸张永远白底黑字，不使用 token
+   - 间距 --sp-* 全部为 4 的倍数；触控目标 ≥ --tap-min */
 
 :root {
-  --bg: #f4f5f7;
+  color-scheme: light dark;
+
+  --bg: #eef3f8;
   --card: #ffffff;
-  --text: #16181d;
-  /* 次要文字：#6b7280 在 --bg 上只有 4.43，差一点不到 AA 的 4.5，压暗一档 */
+  --text: #101826;
+  /* 次要文字：在 --bg 与 --card 上均 ≥ 4.9:1（AA 4.5） */
   --muted: #5f6b7a;
-  --line: #e5e7eb;
-  --primary: #2563eb;
+  --line: #dbe4ee;
+  --line-strong: #c3d2e2;
+
+  /* 以太蓝：秩序之色（链接、主按钮） */
+  --primary: #0b6bcb;
   --primary-ink: #ffffff;
-  /* 主色描边（通用码卡片） */
-  --primary-line: #c7d7f5;
+  --primary-hi: #1173dd;
+  --primary-lo: #0b5fc0;
+  --primary-edge: #0a55ac;
+  --primary-soft: #e9f1fb;
+  --primary-line: #bcd7f4;
+
+  /* 青碧：生命之色（强调、脉冲） */
+  --accent: #0d9488;
+
+  /* 一键拨号：青碧渐变 */
   --call: #047857;
-  --call-strong: #065f46;
+  --call-hi: #069269;
+  --call-lo: #046149;
   --call-ink: #ffffff;
+
   --danger: #c02626;
   --danger-ink: #ffffff;
   --warn-text: #b45309;
-  --warn-bg: #fef2f2;
-  --warn-line: #fecaca;
-  --info-bg: #eff6ff;
-  --info-line: #bfdbfe;
-  --ok-bg: #ecfdf5;
+  --warn-bg: #fdf2f2;
+  --warn-line: #f3cdcd;
+  --info-bg: #e9f1fb;
+  --info-line: #bcd7f4;
+  --ok-bg: #e9f9f2;
+
   /* 卡片内部的「凹槽」面：管理链接框、选车牌项、打印说明卡 */
-  --soft: #f7f9fc;
-  --soft-line: #e2e6ee;
+  --soft: #f5f8fc;
+  --soft-line: #dfe7f1;
   /* 等宽网址块 */
   --code-bg: #ffffff;
-  --code-line: #e6eaf2;
-  --radius: 16px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.06);
+  --code-line: #dfe6f0;
 
-  /* 间距节奏：全部用 4 的倍数，避免随手写 13px / 18px 这种 */
+  /* 车牌拟真：真实蓝牌的底色（物理隐喻，深浅色模式下保持一致） */
+  --plate-hi: #1d63d4;
+  --plate-lo: #134a9e;
+
+  --radius: 16px;
+  --radius-s: 10px;
+  --shadow: 0 1px 2px rgba(13, 32, 58, 0.05), 0 10px 28px rgba(13, 32, 58, 0.07);
+  --shadow-lift: 0 2px 6px rgba(13, 32, 58, 0.08), 0 16px 40px rgba(13, 32, 58, 0.1);
+
+  /* 间距节奏：全部用 4 的倍数 */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -40,39 +70,47 @@
   --sp-6: 32px;
 
   /* 键盘焦点环：留出偏移，深色背景下也看得见 */
-  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.4);
+  --focus-ring: 0 0 0 3px rgba(11, 107, 203, 0.38);
   /* 触摸目标下限（WCAG 2.2 / iOS 44pt） */
   --tap-min: 44px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1115;
-    --card: #171a21;
-    --text: #e8eaed;
-    --muted: #9aa1ad;
-    --line: #262b35;
-    --primary: #3b82f6;
-    /* 深色下主按钮底是亮蓝，字必须换成深墨：白字压亮蓝只有 3.68，不达 AA */
+    --bg: #0f141b;
+    --card: #161d27;
+    --text: #e7ebf1;
+    --muted: #9daab9;
+    --line: #2a3442;
+    --line-strong: #3a4757;
+    --primary: #4b93ea;
+    /* 深色下主按钮底是亮蓝，字必须换成深墨（白字压亮蓝不达 AA） */
     --primary-ink: #0b1220;
-    --primary-line: #1e3a5f;
-    --call: #059669;
-    --call-strong: #10b981;
+    --primary-hi: #5a9dee;
+    --primary-lo: #3584de;
+    --primary-edge: #2a76cc;
+    --primary-soft: #16273c;
+    --primary-line: #24466e;
+    --accent: #2dd4bf;
+    --call: #0b9e74;
+    --call-hi: #14b384;
+    --call-lo: #088561;
     --call-ink: #04120d;
     --danger: #f87171;
     --danger-ink: #2a0b0b;
-    --warn-text: #fbbf24;
-    --warn-bg: #2a1517;
-    --warn-line: #5b2429;
-    --info-bg: #131f33;
-    --info-line: #1e3a5f;
-    --ok-bg: #10231b;
-    --soft: #1c2129;
-    --soft-line: #333b49;
-    --code-bg: #11141a;
-    --code-line: #2b323e;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.5);
+    --warn-text: #f5c066;
+    --warn-bg: #2a1a17;
+    --warn-line: #5b3030;
+    --info-bg: #14263c;
+    --info-line: #24466e;
+    --ok-bg: #10241c;
+    --soft: #1b2430;
+    --soft-line: #313d4d;
+    --code-bg: #101722;
+    --code-line: #2b3646;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+    --shadow-lift: 0 2px 8px rgba(0, 0, 0, 0.5);
+    --focus-ring: 0 0 0 3px rgba(75, 147, 234, 0.5);
   }
 }
 
@@ -87,7 +125,10 @@ body {
 }
 
 body {
-  background: var(--bg);
+  background:
+    radial-gradient(1100px 500px at 85% -180px, rgba(11, 107, 203, 0.06), transparent 62%),
+    radial-gradient(900px 420px at -10% -160px, rgba(13, 148, 136, 0.05), transparent 60%),
+    var(--bg);
   color: var(--text);
   font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", sans-serif;
@@ -95,6 +136,7 @@ body {
   line-height: 1.6;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
 }
 
 /* ------------------------- 可访问性与触控基础 ------------------------ */
@@ -110,8 +152,7 @@ summary,
   touch-action: manipulation;
 }
 
-/* 键盘焦点必须看得见。只压掉鼠标点击时的轮廓，不动键盘焦点 —— 
-   直接 outline:none 会让键盘用户完全找不到自己在哪。 */
+/* 键盘焦点必须看得见。只压掉鼠标点击时的轮廓，不动键盘焦点 */
 :focus-visible {
   outline: 3px solid var(--primary);
   outline-offset: 2px;
@@ -130,6 +171,25 @@ summary,
   border: 0;
 }
 
+/* 跳到主要内容：长页面（后台）键盘用户的第一站 */
+.skip-link {
+  position: absolute;
+  left: var(--sp-3);
+  top: -48px;
+  z-index: 200;
+  padding: 10px 16px;
+  border-radius: 0 0 10px 10px;
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-size: 14px;
+  font-weight: 600;
+  transition: top 0.15s ease;
+}
+
+.skip-link:focus-visible {
+  top: 0;
+}
+
 /* 系统开了「减少动态效果」就不要再做过渡 */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -146,11 +206,21 @@ a {
   text-decoration: none;
 }
 
+a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* 按钮链接不写下划线（.btn 自带边框语言） */
+a.btn:hover {
+  text-decoration: none;
+}
+
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.88em;
-  background: var(--bg);
-  border: 1px solid var(--line);
+  background: var(--soft);
+  border: 1px solid var(--soft-line);
   border-radius: 6px;
   padding: 1px 5px;
   word-break: break-all;
@@ -181,22 +251,36 @@ code {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 18px;
-  margin-bottom: 16px;
+  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  margin-bottom: var(--sp-4);
 }
 
 .card-title {
   font-size: 17px;
-  font-weight: 600;
-  margin: 0 0 12px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  margin: 0 0 var(--sp-3);
+  text-wrap: balance;
+}
+
+/* 标题前的品牌小方块：泊流的「模块」记号 */
+.card-title::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 2.5px;
+  background: linear-gradient(135deg, var(--primary-hi), var(--accent));
+  vertical-align: 1px;
 }
 
 .card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
 }
 
 .card-head .card-title {
@@ -204,11 +288,185 @@ code {
 }
 
 .card-note {
-  background: linear-gradient(180deg, var(--ok-bg), var(--card));
+  background: linear-gradient(180deg, var(--ok-bg), var(--card) 72%);
 }
 
 .center-card {
   text-align: center;
+}
+
+/* 泊流静态切片：装饰性图案（内联 SVG，currentColor 上色） */
+.tide {
+  display: block;
+  color: var(--primary);
+  pointer-events: none;
+  user-select: none;
+}
+
+.tide-hero {
+  width: min(240px, 56vw);
+  margin: 0 auto var(--sp-2);
+  opacity: 0.5;
+}
+
+.tide-ripple {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--call);
+  opacity: 0.14;
+}
+
+/* ------------------------------ 顶栏 ------------------------------ */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: color-mix(in srgb, var(--card) 86%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* 顶栏底缘的品牌流线：以太蓝 → 青碧 */
+.topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--accent) 55%, transparent 92%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+/* 品牌记号：二维码定位图形（泊流的三座灯塔之一） */
+.brand-mark {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  color: var(--primary);
+}
+
+.brand-mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ------------------------------ 徽标 ------------------------------ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  background: var(--soft);
+  white-space: nowrap;
+}
+
+.badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.75;
+}
+
+.badge-on {
+  color: var(--call);
+  border-color: color-mix(in srgb, var(--call) 45%, transparent);
+  background: color-mix(in srgb, var(--call) 8%, var(--card));
+}
+
+.badge-off {
+  color: var(--muted);
+}
+
+.badge-new {
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+  background: var(--primary-soft);
+}
+
+.badge-call {
+  color: var(--call);
+  border-color: color-mix(in srgb, var(--call) 45%, transparent);
+  background: color-mix(in srgb, var(--call) 8%, var(--card));
+}
+
+.badge-msg {
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+/* ------------------------------ 车牌拟真 -------------------------- */
+
+/* 车牌徽标：真实蓝牌的样子（深蓝底、白字、白色内框）。
+   物理隐喻用固定色 —— 真牌照不分昼夜都是蓝的，深浅模式下都一样。 */
+.plate-chip {
+  display: inline-block;
+  font-weight: 800;
+  letter-spacing: 2px;
+  line-height: 1.25;
+  color: #ffffff;
+  background: linear-gradient(180deg, var(--plate-hi), var(--plate-lo));
+  border-radius: 9px;
+  padding: 6px 14px;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.9),
+    inset 0 0 0 3.5px rgba(19, 74, 158, 0.55),
+    0 3px 8px rgba(13, 42, 92, 0.28);
+  text-shadow: 0 1px 2px rgba(9, 30, 70, 0.4);
+  font-variant-numeric: tabular-nums;
+  word-break: break-all;
+}
+
+/* 扫码页的车牌：整个页面的视觉锚点，给足体量 */
+.hero-plate {
+  display: inline-block;
+  margin-top: var(--sp-2);
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  line-height: 1.2;
+  padding: 12px 26px;
+  border-radius: 12px;
+  text-shadow: 0 1.5px 3px rgba(9, 30, 70, 0.45);
+}
+
+/* 等宽编号：贴纸对号全靠它，好抄比好看重要 */
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 /* ------------------------------ 扫码页 ---------------------------- */
@@ -219,44 +477,56 @@ code {
 }
 
 .hero-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   color: var(--muted);
-  letter-spacing: 1px;
+  letter-spacing: 2px;
 }
 
-.hero-plate {
-  display: inline-block;
-  margin-top: var(--sp-2);
-  font-size: 34px;
-  font-weight: 800;
-  letter-spacing: 3px;
-  line-height: 1.2;
-  padding: 12px 26px;
-  border-radius: 14px;
-  background: var(--card);
-  border: 2px solid var(--primary);
-  color: var(--primary);
-  box-shadow: var(--shadow);
-  word-break: break-all;
+.hero-label::before,
+.hero-label::after {
+  content: "";
+  width: 18px;
+  height: 1px;
+  background: var(--line-strong);
 }
 
 .hero-title {
-  margin-top: var(--sp-3);
+  /* 语义上是 h1：显式清掉 UA 默认 margin/字重，保持原本的视觉层级 */
+  margin: var(--sp-3) 0 0;
+  font-weight: 400;
   color: var(--muted);
   font-size: 15px;
+  text-wrap: balance;
+}
+
+.hero-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 6px;
 }
 
 .note-text {
   margin: 0;
   font-size: 17px;
-  line-height: 1.7;
+  line-height: 1.75;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-/* 扫码页的主操作区：只放一个按钮，占满宽度，足够大 */
+/* 扫码页的主操作区：只放一个按钮，占满宽度，足够大。
+   涟漪弧线（泊流的「连接脉冲」）作背景装饰。 */
 .action-card {
-  padding: var(--sp-4);
+  position: relative;
+  overflow: hidden;
+  padding: var(--sp-5) var(--sp-4);
+}
+
+.action-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .divider {
@@ -280,7 +550,7 @@ code {
   background: var(--info-bg);
   border: 1px solid var(--info-line);
   border-radius: 12px;
-  padding: 12px 14px;
+  padding: var(--sp-3) 14px;
   font-size: 14px;
   color: var(--text);
 }
@@ -290,14 +560,14 @@ code {
   font-size: 12px;
   text-align: center;
   line-height: 1.8;
-  margin: 4px 12px 0;
+  margin: 4px var(--sp-3) 0;
 }
 
 .big-ok {
   width: 64px;
   height: 64px;
   line-height: 64px;
-  margin: 4px auto 12px;
+  margin: 4px auto var(--sp-3);
   border-radius: 50%;
   background: var(--ok-bg);
   color: var(--call);
@@ -307,7 +577,65 @@ code {
 
 .ok-title {
   font-size: 20px;
-  margin: 0 0 8px;
+  margin: 0 0 var(--sp-2);
+  text-wrap: balance;
+}
+
+/* 选车牌（通用码多车时）：人就站在车前，照车牌点一下 */
+.pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pick-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--soft-line);
+  border-radius: 12px;
+  background: var(--card);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.06s ease;
+}
+
+.pick-item:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  text-decoration: none;
+}
+
+.pick-item:active {
+  transform: scale(0.99);
+}
+
+.pick-plate {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #ffffff;
+  background: linear-gradient(180deg, var(--plate-hi), var(--plate-lo));
+  border-radius: 8px;
+  padding: 5px 12px;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(9, 30, 70, 0.4);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pick-owner {
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.pick-warn {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--warn-text);
+  white-space: nowrap;
 }
 
 /* ------------------------------ 表单 ------------------------------ */
@@ -338,14 +666,15 @@ code {
 
 input[type="text"],
 input[type="password"],
+input[type="number"],
 select,
 textarea {
   width: 100%;
   font: inherit;
   color: var(--text);
   background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-s);
   padding: 11px 12px;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -359,13 +688,19 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  box-shadow: var(--focus-ring);
+}
+
+/* Windows 深色模式下的原生下拉：显式指定底色与文字色 */
+select {
+  background-color: var(--card);
+  color: var(--text);
 }
 
 .check {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--sp-2);
   font-size: 14px;
   color: var(--muted);
 }
@@ -413,13 +748,15 @@ textarea:focus {
 
 .plate-preview.on {
   display: inline-block;
-  padding: 3px 12px;
-  border: 2px solid var(--primary);
+  padding: 4px 14px;
   border-radius: 8px;
-  color: var(--primary);
+  color: #ffffff;
+  background: linear-gradient(180deg, var(--plate-hi), var(--plate-lo));
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.85);
   font-size: 18px;
   font-weight: 800;
   letter-spacing: 2px;
+  text-shadow: 0 1px 2px rgba(9, 30, 70, 0.4);
 }
 
 .plate-special {
@@ -430,6 +767,7 @@ textarea:focus {
   font-size: 12px;
   color: var(--muted);
   cursor: pointer;
+  padding: 6px 0;
 }
 
 .plate-special input {
@@ -449,19 +787,20 @@ textarea:focus {
   font: inherit;
   font-weight: 600;
   border-radius: 12px;
-  border: 1px solid transparent;
+  border: 1px solid var(--line-strong);
   padding: 11px 18px;
   cursor: pointer;
   background: var(--card);
   color: var(--text);
-  border-color: var(--line);
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease,
-    transform 0.06s ease;
+    transform 0.06s ease, color 0.15s ease;
   white-space: nowrap;
 }
 
 .btn:hover {
   border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .btn:active {
@@ -482,48 +821,69 @@ textarea:focus {
 }
 
 .btn-primary {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: linear-gradient(180deg, var(--primary-hi), var(--primary-lo));
+  border-color: var(--primary-edge);
   color: var(--primary-ink);
+  box-shadow: 0 1px 2px rgba(9, 60, 130, 0.28);
+  text-shadow: 0 1px 1px rgba(9, 40, 90, 0.18);
 }
 
 .btn-primary:hover {
-  filter: brightness(1.08);
+  background: linear-gradient(180deg, var(--primary-hi), var(--primary-lo));
+  border-color: var(--primary-edge);
+  color: var(--primary-ink);
+  box-shadow: 0 3px 10px rgba(9, 60, 130, 0.32);
+  filter: brightness(1.06);
 }
 
-/* 一键拨号：整个页面的唯一主操作，所以给它最大的体量和最明确的按压反馈 */
+/* 一键拨号：整个页面的唯一主操作，最大的体量 + 最明确的按压反馈 */
 .btn-call {
-  background: var(--call);
-  border-color: var(--call);
+  position: relative;
+  background: linear-gradient(180deg, var(--call-hi), var(--call-lo));
+  border-color: var(--call-lo);
   color: var(--call-ink);
   min-height: 64px;
   font-size: 19px;
   font-weight: 700;
   letter-spacing: 1px;
   border-radius: 14px;
-  box-shadow: 0 8px 20px rgba(4, 120, 87, 0.24);
+  box-shadow: 0 10px 26px rgba(4, 120, 87, 0.3);
+  text-shadow: 0 1px 2px rgba(3, 60, 42, 0.25);
 }
 
 .btn-call:hover {
-  background: var(--call-strong);
-  border-color: var(--call-strong);
+  background: linear-gradient(180deg, var(--call-hi), var(--call-lo));
+  border-color: var(--call-lo);
+  color: var(--call-ink);
+  filter: brightness(1.07);
+  box-shadow: 0 12px 30px rgba(4, 120, 87, 0.36);
 }
 
 .btn-call:active {
   transform: translateY(2px);
-  box-shadow: 0 2px 6px rgba(4, 120, 87, 0.2);
+  box-shadow: 0 3px 8px rgba(4, 120, 87, 0.24);
 }
 
 .btn-danger {
   background: transparent;
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  color: var(--danger);
+}
+
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
   border-color: var(--danger);
   color: var(--danger);
 }
 
 .btn-ghost {
   background: transparent;
-  border-color: var(--line);
+  border-color: var(--line-strong);
   color: var(--text);
+}
+
+.btn-ghost:hover {
+  background: var(--soft);
 }
 
 .btn-sm {
@@ -563,76 +923,34 @@ textarea:focus {
   stroke-linejoin: round;
 }
 
+/* 卡片标题旁的小图标（语义装饰） */
+.card-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.card-icon svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* ------------------------------ 后台 ------------------------------ */
-
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
-  background: var(--card);
-  border-bottom: 1px solid var(--line);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.brand {
-  font-weight: 700;
-  letter-spacing: 0.3px;
-}
-
-.topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.badge {
-  display: inline-block;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 2px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  background: var(--bg);
-}
-
-.badge-on {
-  color: var(--call);
-  border-color: var(--call);
-}
-
-.badge-off {
-  color: var(--muted);
-}
-
-.badge-new {
-  color: var(--primary);
-  border-color: var(--primary);
-}
-
-.badge-call {
-  color: var(--call);
-  border-color: var(--call);
-}
-
-.badge-msg {
-  color: var(--primary);
-  border-color: var(--primary);
-}
 
 .car-list {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 16px;
+  gap: var(--sp-4);
 }
 
-/* 桌面端：车卡横向铺开，一屏能看好几辆，不用一辆一辆往下滚。
-   用 auto-fit 而不是 auto-fill —— 空轨道会塌缩，所以只有一辆车时它铺满整行，
-   两辆以上才分成两栏（auto-fill 会让单车用户对着一张半宽卡片和半边空白）。 */
+/* 桌面端：车卡横向铺开。auto-fit 让空轨道塌缩：
+   单车铺满整行，两辆以上才分栏（auto-fill 会让单车用户对着半边空白）。 */
 @media (min-width: 900px) {
   .car-list {
     grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
@@ -642,33 +960,41 @@ textarea:focus {
 .car {
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 14px;
-  background: var(--bg);
+  padding: var(--sp-4);
+  background: var(--soft);
 }
 
 .car-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--sp-3);
 }
 
-/* 窄屏上「启用中」会被旁边的长文字挤成一列一个字，这里不让它被压缩 */
+/* 窄屏上「启用中」不允许被挤成一列一个字 */
 .car-head > .badge {
   flex: 0 0 auto;
   white-space: nowrap;
 }
 
 .car-plate {
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 1px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #ffffff;
+  background: linear-gradient(180deg, var(--plate-hi), var(--plate-lo));
+  display: inline-block;
+  border-radius: 8px;
+  padding: 4px 12px;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(9, 30, 70, 0.4);
+  font-variant-numeric: tabular-nums;
 }
 
 .car-meta {
   font-size: 12px;
   color: var(--muted);
-  margin-top: 2px;
+  margin-top: var(--sp-2);
 }
 
 .dot {
@@ -677,7 +1003,7 @@ textarea:focus {
 
 .car-body {
   display: flex;
-  gap: 16px;
+  gap: var(--sp-4);
   margin-top: 14px;
   align-items: flex-start;
 }
@@ -689,13 +1015,15 @@ textarea:focus {
   }
 }
 
+/* 二维码必须白底（扫码器对比度），不随主题变 */
 .qr-box {
   flex: 0 0 auto;
-  background: #fff;
+  background: #ffffff;
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 8px;
+  padding: var(--sp-2);
   line-height: 0;
+  box-shadow: 0 2px 8px rgba(13, 32, 58, 0.08);
 }
 
 .qr-box svg {
@@ -719,22 +1047,27 @@ textarea:focus {
 
 .car-edit {
   margin-top: 14px;
-  border-top: 1px dashed var(--line);
-  padding-top: 12px;
+  border-top: 1px dashed var(--line-strong);
+  padding-top: var(--sp-3);
 }
 
 .car-edit summary {
   cursor: pointer;
   font-weight: 600;
   font-size: 14px;
-  margin-bottom: 12px;
+  margin-bottom: var(--sp-3);
   color: var(--muted);
+  padding: 6px 0;
+}
+
+.car-edit summary:hover {
+  color: var(--primary);
 }
 
 .danger-zone {
   margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--line);
+  padding-top: var(--sp-3);
+  border-top: 1px dashed color-mix(in srgb, var(--danger) 35%, transparent);
 }
 
 .hint {
@@ -744,7 +1077,7 @@ textarea:focus {
   line-height: 1.7;
 }
 
-/* 号码没填全时的警告：图标 + 文字，不用 emoji（emoji 在不同系统里长得完全不一样） */
+/* 号码没填全时的警告：图标 + 文字，不用 emoji */
 .warn-text {
   display: inline-flex;
   align-items: flex-start;
@@ -784,27 +1117,27 @@ textarea:focus {
   gap: 6px;
 }
 
-/* 一行一条记录：车牌 · 时间 · 状态。
-   记录以前是三条文字（车牌时间 / 「有人点了一次拨号」/ 「不记录任何信息」），
-   20 条就把这一屏撑成 5.4 屏；现在四行字并成一行，列表再长也只是多几行。 */
+/* 一行一条记录：车牌 · 时间 · 状态。紧凑是硬要求 —— 记录只增不减。 */
 .msg {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px 8px;
+  gap: 6px var(--sp-2);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-s);
   padding: 6px 10px;
-  background: var(--bg);
+  background: var(--card);
   font-size: 13px;
 }
 
 .msg-unread {
-  border-color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 55%, transparent);
+  background: var(--primary-soft);
 }
 
 .msg-plate {
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .msg-time {
@@ -819,8 +1152,7 @@ textarea:focus {
   margin: 0;
 }
 
-/* 「标记已读」按钮：手机上是 44px 高的触控目标（保留），但宽度不能再从 44px 起步 ——
-   375px 一行只有 300 多 px，按默认内边距这一行必折行。 */
+/* 「标记已读」按钮：手机上保持 44px 触控高度，宽度收紧防止折行 */
 .msg form .btn {
   padding-left: 12px;
   padding-right: 12px;
@@ -830,14 +1162,15 @@ textarea:focus {
 
 /* 记录只增不减，默认只铺最近 10 条，更早的收起来 */
 .more-records {
-  margin-top: 8px;
+  margin-top: var(--sp-2);
 }
 
 .more-records > summary {
   cursor: pointer;
   color: var(--muted);
   font-size: 13px;
-  padding: 6px 2px;
+  padding: 8px 2px;
+  border-radius: 6px;
 }
 
 .more-records > summary:hover {
@@ -845,20 +1178,21 @@ textarea:focus {
 }
 
 .more-records[open] > summary {
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-2);
 }
 
 /* 卡片里「可折叠的说明」：默认只留一句关键的，详细解释点开才看 */
 .card-help {
-  margin: 8px 0 0;
+  margin: var(--sp-2) 0 0;
 }
 
 .card-help > summary {
   cursor: pointer;
   color: var(--muted);
   font-size: 13px;
-  padding: 6px 2px;
+  padding: 8px 2px;
   list-style-position: inside;
+  border-radius: 6px;
 }
 
 .card-help > summary:hover {
@@ -866,7 +1200,7 @@ textarea:focus {
 }
 
 .card-help[open] > summary {
-  margin-bottom: 4px;
+  margin-bottom: var(--sp-1);
 }
 
 .card-help .hint {
@@ -888,7 +1222,7 @@ textarea:focus {
 }
 
 .code-group {
-  margin-top: 8px;
+  margin-top: var(--sp-2);
 }
 
 .code-group > summary {
@@ -896,7 +1230,8 @@ textarea:focus {
   font-weight: 600;
   font-size: 14px;
   color: var(--muted);
-  padding: 6px 2px;
+  padding: 8px 2px;
+  border-radius: 6px;
 }
 
 .code-group > summary:hover {
@@ -916,16 +1251,16 @@ textarea:focus {
   gap: 6px;
 }
 
-/* 一条编号占一行：编号 · 状态 · 操作。跟拨号记录同一套紧凑原则 —— 编号会攒到几十个 */
+/* 一条编号占一行：编号 · 状态 · 操作 */
 .code-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px 8px;
+  gap: 6px var(--sp-2);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-s);
   padding: 6px 10px;
-  background: var(--bg);
+  background: var(--card);
   font-size: 13px;
 }
 
@@ -934,6 +1269,7 @@ textarea:focus {
   font-size: 13px;
   letter-spacing: 0.5px;
   font-weight: 700;
+  color: var(--primary);
 }
 
 .code-ops {
@@ -990,6 +1326,12 @@ textarea:focus {
   animation: banner-in 0.18s ease-out;
 }
 
+/* 横幅里内嵌的操作表单（如「清理空白车辆」）：跟文字排成一行 */
+.banner-form {
+  display: inline;
+  margin-left: var(--sp-2);
+}
+
 @keyframes banner-in {
   from {
     opacity: 0;
@@ -1013,7 +1355,7 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
   z-index: 100;
   pointer-events: none;
 }
@@ -1027,13 +1369,13 @@ textarea:focus {
   font-size: 14px;
   font-weight: 600;
   text-align: center;
-  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.28);
+  box-shadow: var(--shadow-lift);
   animation: toast-in 0.18s ease-out;
 }
 
 .toast-error {
   background: var(--danger);
-  /* 深色模式下 --danger 是浅红，白字在上面只有 2.77，得换成深墨 */
+  /* 深色模式下 --danger 是浅红，字得换成深墨 */
   color: var(--danger-ink);
 }
 
@@ -1069,13 +1411,13 @@ textarea:focus {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--sp-3);
   max-width: 900px;
   margin: 0 auto;
-  padding: 16px;
+  padding: var(--sp-4);
 }
 
-/* ---------- 贴纸：两种尺寸（5×5cm 正方形 / 10×5cm 长方形） ---------- */
+/* ---------- 贴纸：三款尺寸，永远白底黑字（打印件，不随主题） ---------- */
 
 .sticker {
   box-sizing: border-box;
@@ -1093,8 +1435,8 @@ textarea:focus {
 }
 
 /* 正方形两款：50×50mm 与 60×60mm。
-   三行文字（标题 / 副标题 / 提示）各占一行高度，二维码能拿到的就是剩下的部分。
-   下面的数字是「文字刚好放得下、二维码取最大」的实测结果：
+   三行文字各占一行高度，二维码拿剩下的部分。
+   数字是「文字刚好放得下、二维码取最大」的实测结果：
    50mm 款可用高 46.5mm = 标题 4.5 + 副标题 2.2 + 二维码 34.5 + 上下留白 2 + 提示 2.9；
    60mm 款可用高 55.5mm = 标题 5.7 + 副标题 3.3 + 二维码 40.5 + 上下留白 2 + 提示 3.5。 */
 .sticker-square,
@@ -1180,7 +1522,6 @@ textarea:focus {
 .sticker-rect {
   width: 100mm;
   height: 50mm;
-  /* 内边距收到 2mm：二维码高度受贴纸高度限制，这里让出来的空间直接给了码 */
   padding: 2mm;
   flex-direction: row;
   gap: 4mm;
@@ -1188,7 +1529,7 @@ textarea:focus {
 }
 
 .sticker-rect .sticker-qr {
-  /* 贴纸高 50mm，去掉 2mm 内边距和边框后可用高度约 45.2mm —— 码就顶到这个上限 */
+  /* 贴纸高 50mm，去掉内边距与边框后可用约 45.2mm —— 码顶到这个上限 */
   width: 45mm;
   height: 45mm;
   flex: 0 0 auto;
@@ -1237,7 +1578,7 @@ textarea:focus {
   gap: 6px;
   font-size: 13px;
   color: var(--muted);
-  /* 「尺寸：」这三个字不能被拆成两行（手机上窄，flex 会把文本节点当独立项挤） */
+  /* 「尺寸：」这三个字不能被拆成两行 */
   white-space: nowrap;
 }
 
@@ -1254,11 +1595,11 @@ textarea:focus {
 /* 每辆车的管理链接（可转发给开车的人） */
 
 .car-share {
-  margin-top: 12px;
-  padding: 12px 14px;
+  margin-top: var(--sp-3);
+  padding: var(--sp-3) 14px;
   border: 1px dashed var(--soft-line);
-  border-radius: 10px;
-  background: var(--soft);
+  border-radius: var(--radius-s);
+  background: var(--card);
 }
 
 .car-share-head {
@@ -1271,7 +1612,7 @@ textarea:focus {
 
 .edit-link {
   display: block;
-  margin: 8px 0 6px;
+  margin: var(--sp-2) 0 6px;
   padding: 7px 9px;
   background: var(--code-bg);
   border: 1px solid var(--code-line);
@@ -1313,24 +1654,24 @@ textarea:focus {
 .user-cars {
   margin-left: auto;
   color: var(--primary);
+  font-variant-numeric: tabular-nums;
 }
 
 .user-time {
   color: var(--muted);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .sticker-url {
   font-size: 7pt;
-  /* 这行永远印在白纸上（贴纸框外的对号标签），所以固定用深灰，不能跟着深色模式变浅 */
+  /* 这行永远印在白纸上（框外对号标签），固定深灰，不跟主题变 */
   color: #6b6b6b;
   word-break: break-all;
 }
 
-/* 打印页：屏幕上的「纸」。
-   屏幕上按 A4 的样子显示（210×297mm，四周 6mm 内边距 = @page 的页边距），
-   这样用户点打印之前就看得见「会印成什么样、每行几张」。纸张轮廓只在屏幕上画，
-   打印时 .paper 会被剥掉，交给真正的纸张。 */
+/* 打印页：屏幕上的「纸」。屏幕按 A4 显示（210×297mm、6mm 页边距），
+   打印时剥掉轮廓交给真纸。 */
 .paper {
   box-sizing: border-box;
   width: 210mm;
@@ -1347,10 +1688,8 @@ textarea:focus {
   justify-content: center;
 }
 
-/* 贴纸网格：宽 = A4 可打印宽度（210 - 2×6mm = 198mm），间距用 gap。
-   **屏幕和打印共用这一套盒模型**，所以「屏幕每行几张」就是「纸上每行几张」。
-   max-width:100% 是为了兜住「打印机实际边距比 6mm 更宽」的情况：宁可排得松一点，
-   也不要溢出纸张被裁掉。 */
+/* 贴纸网格：宽 = A4 可打印宽度（198mm），间距 5mm。
+   屏幕和打印共用同一套盒模型 —— 屏幕每行几张，纸上就每行几张。 */
 .sticker-sheet {
   display: flex;
   flex-wrap: wrap;
@@ -1376,12 +1715,11 @@ textarea:focus {
   margin-top: 1mm;
 }
 
-/* 屏幕上的打印说明：一张浅底卡片，宽度和纸一致，读起来成块。
-   打印时隐藏（见 @media print）—— 纸上只要贴纸。 */
+/* 屏幕上的打印说明：浅底卡片，宽度和纸一致。打印时隐藏 —— 纸上只要贴纸。 */
 .print-notes {
   max-width: 198mm;
-  margin: 0 auto 12px;
-  padding: 12px 16px;
+  margin: 0 auto var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
   background: var(--soft);
   border: 1px solid var(--soft-line);
   border-radius: 12px;
@@ -1397,76 +1735,25 @@ textarea:focus {
 }
 
 .print-note + .print-note {
-  margin-top: 8px;
+  margin-top: var(--sp-2);
 }
 
-/* 通用码在启用多辆车时的「选车牌」页 */
-
-.pick-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.pick-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 18px;
-  border: 1px solid var(--soft-line);
-  border-radius: 12px;
-  background: var(--card);
-  text-decoration: none;
-  color: inherit;
-}
-
-.pick-item:hover {
-  border-color: var(--primary);
-  background: var(--soft);
-}
-
-.pick-plate {
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 1px;
-}
-
-.pick-owner {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.pick-warn {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--warn-text);
-}
-
-.hero-sub {
-  font-size: 13px;
-  color: var(--muted);
-  margin-top: 6px;
-}
-
-/* 后台顶部的通用码卡片稍微强调一下 */
+/* 通用码卡片稍微强调一下 */
 
 .card-universal {
   border: 1px solid var(--primary-line);
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
+  box-shadow: 0 1px 3px rgba(11, 107, 203, 0.1);
 }
 
 /* ---------------------- 移动端（手机优先那部分） ---------------------- */
 
 /*
- * 断点约定（对齐 ui-ux-pro-max 的建议：375 / 768 / 1024 / 1440）：
- *   手机   ≤ 640px   —— 这里做「触控目标 + 内容优先级」
- *   平板   ≤ 1024px  —— 两栏结构不变，只放宽间距
- *   桌面   > 1024px
- * 之所以取 640 而不是 375：560~640 之间车牌三段 + 车辆卡片已经会挤，按内容换行位置定。
+ * 断点约定：手机 ≤ 640px / 平板 ≤ 1024px / 桌面 > 1024px。
+ * 640 按内容换行位置定（560~640 之间车牌三段 + 车卡会挤）。
  */
 
-/* 刘海屏：viewport-fit=cover 会让内容顶到状态栏/刘海下面，
-   固定的顶栏必须自己让开安全区，否则标题会被挡住。 */
+/* 刘海屏：viewport-fit=cover 会让内容顶到状态栏下面，
+   固定顶栏必须自己让开安全区 */
 .topbar {
   padding-top: calc(12px + env(safe-area-inset-top));
   padding-left: max(16px, env(safe-area-inset-left));
@@ -1479,7 +1766,7 @@ textarea:focus {
 }
 
 @media (max-width: 640px) {
-  /* 触控目标：桌面可以紧凑，手机上必须够大 —— 手指点不中就会误触 */
+  /* 触控目标：桌面可以紧凑，手机上必须够大 */
   .btn-sm,
   .btn-xs {
     min-height: var(--tap-min);
@@ -1487,8 +1774,7 @@ textarea:focus {
     font-size: 14px;
   }
 
-  /* 内容优先级：手机上先看自己的车和拨号记录，
-     「新增车辆」那个长表单排到后面 —— 否则要滚一屏多才能看到自己的车 */
+  /* 内容优先级：手机上先看自己的车和记录，长表单排后面 */
   body.admin .wrap {
     display: flex;
     flex-direction: column;
@@ -1506,19 +1792,22 @@ textarea:focus {
   body.admin .card-records {
     order: 3;
   }
-  body.admin .card-universal {
+  body.admin .card-codes {
     order: 4;
   }
-  body.admin .card-newcar {
+  body.admin .card-universal {
     order: 5;
   }
-  body.admin .card-users {
+  body.admin .card-newcar {
     order: 6;
+  }
+  body.admin .card-users {
+    order: 7;
   }
 
   /* 手机上屏幕窄，卡片内边距收一点，把宽度让给内容 */
   .card {
-    padding: 16px;
+    padding: var(--sp-4);
   }
 
   /* 车牌三段在 320px 宽的手机上要挤得下 */
@@ -1534,7 +1823,7 @@ textarea:focus {
     letter-spacing: 2px;
   }
 
-  /* 车卡里的三个按钮排两列：原来三行、现在两行，省一截高度 */
+  /* 车卡里的按钮排两列，省一截高度 */
   .car-actions .btn-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1557,10 +1846,9 @@ textarea:focus {
   display: none;
 }
 
-/* 手机端的 A4 预览：手机屏幕放不下 210mm 宽的纸（794px），
-   所以按比例缩小显示，好让人一眼看完整版式。
-   缩放的**只是预览**：打印尺寸由 @page 和贴纸的 mm 尺寸决定，不受影响。
-   故意用 @media screen 限定 —— 打印媒体绝不套用这些缩放（否则贴纸会被缩小印出来）。 */
+/* 手机端的 A4 预览：屏幕放不下 210mm 宽的纸，按比例缩小显示。
+   缩放的只是预览：打印尺寸由 @page 与贴纸 mm 尺寸决定，不受影响。
+   必须限定 screen —— 不带 screen 会漏进打印媒体，把贴纸等比缩小印出来。 */
 @media screen and (max-width: 900px) {
   .paper {
     zoom: 0.8;
@@ -1582,11 +1870,10 @@ textarea:focus {
     zoom: 0.48;
   }
 
-  /* 工具栏在手机上：第一行「返回 + 打印」（打印尽量占满），尺寸切换单独一行。
-     不把每个按钮都拉成整行 —— 那样工具栏会有 5 行高，把预览挤出首屏。 */
+  /* 工具栏在手机上：第一行「返回 + 打印」，尺寸切换单独一行 */
   .print-toolbar {
-    gap: 8px;
-    padding: 12px;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
   }
 
   .print-toolbar .btn-primary {
@@ -1639,6 +1926,8 @@ textarea:focus {
     padding-top: max(12px, env(safe-area-inset-top));
   }
 }
+
+/* ------------------------------ 打印 ------------------------------ */
 
 @media print {
   body {

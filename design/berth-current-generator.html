@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<!-- 基于算法艺术技能模板（保留其版式与品牌框架），算法与参数为「泊流」定制 -->
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>泊流 · The Berth Current — 品牌图案生成器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* Anthropic Brand Colors（模板固定部分，保留） */
+        :root {
+            --anthropic-dark: #141413;
+            --anthropic-light: #faf9f5;
+            --anthropic-mid-gray: #b0aea5;
+            --anthropic-light-gray: #e8e6dc;
+            --anthropic-orange: #d97757;
+            --anthropic-blue: #6a9bcc;
+            --anthropic-green: #788c5d;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Poppins', system-ui, sans-serif;
+            background: linear-gradient(135deg, var(--anthropic-light) 0%, #f5f3ee 100%);
+            min-height: 100vh;
+            color: var(--anthropic-dark);
+        }
+
+        .container { display: flex; min-height: 100vh; padding: 20px; gap: 20px; }
+
+        .sidebar {
+            width: 320px; flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 24px; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(20, 20, 19, 0.1);
+            overflow-y: auto; overflow-x: hidden;
+        }
+
+        .sidebar h1 {
+            font-family: 'Lora', serif; font-size: 24px; font-weight: 500;
+            color: var(--anthropic-dark); margin-bottom: 8px;
+        }
+
+        .sidebar .subtitle { color: var(--anthropic-mid-gray); font-size: 14px; margin-bottom: 32px; line-height: 1.4; }
+
+        .control-section { margin-bottom: 32px; }
+
+        .control-section h3 {
+            font-size: 16px; font-weight: 600; color: var(--anthropic-dark);
+            margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+        }
+
+        .control-section h3::before { content: '•'; color: var(--anthropic-orange); font-weight: bold; }
+
+        .seed-input {
+            width: 100%; background: var(--anthropic-light); padding: 12px; border-radius: 8px;
+            font-family: 'Courier New', monospace; font-size: 14px; margin-bottom: 12px;
+            border: 1px solid var(--anthropic-light-gray); text-align: center;
+        }
+
+        .seed-input:focus {
+            outline: none; border-color: var(--anthropic-orange);
+            box-shadow: 0 0 0 2px rgba(217, 119, 87, 0.1); background: white;
+        }
+
+        .seed-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+        .regen-button { margin-bottom: 0; }
+
+        .control-group { margin-bottom: 20px; }
+        .control-group label { display: block; font-size: 14px; font-weight: 500; color: var(--anthropic-dark); margin-bottom: 8px; }
+
+        .slider-container { display: flex; align-items: center; gap: 12px; }
+
+        .slider-container input[type="range"] {
+            flex: 1; height: 4px; background: var(--anthropic-light-gray); border-radius: 2px;
+            outline: none; -webkit-appearance: none;
+        }
+
+        .slider-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 16px; height: 16px;
+            background: var(--anthropic-orange); border-radius: 50%; cursor: pointer;
+        }
+        .slider-container input[type="range"]::-moz-range-thumb {
+            width: 16px; height: 16px; background: var(--anthropic-orange);
+            border: none; border-radius: 50%; cursor: pointer;
+        }
+
+        .value-display { font-family: 'Courier New', monospace; font-size: 12px; color: var(--anthropic-mid-gray); min-width: 60px; text-align: right; }
+
+        .color-group { margin-bottom: 16px; }
+        .color-group label { display: block; font-size: 12px; color: var(--anthropic-mid-gray); margin-bottom: 4px; }
+
+        .color-picker-container { display: flex; align-items: center; gap: 8px; }
+        .color-picker-container input[type="color"] {
+            width: 32px; height: 32px; border: none; border-radius: 6px; cursor: pointer; background: none; padding: 0;
+        }
+        .color-value { font-family: 'Courier New', monospace; font-size: 12px; color: var(--anthropic-mid-gray); }
+
+        .button {
+            background: var(--anthropic-orange); color: white; border: none; padding: 10px 16px;
+            border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; width: 100%;
+        }
+        .button:hover { background: #c86641; }
+        .button.secondary { background: var(--anthropic-blue); }
+        .button.secondary:hover { background: #5a8bb8; }
+        .button.tertiary { background: var(--anthropic-green); }
+        .button.tertiary:hover { background: #6b7b52; }
+        .button-row { display: flex; gap: 8px; }
+        .button-row .button { flex: 1; }
+
+        .canvas-area { flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; }
+
+        #canvas-container {
+            width: 100%; max-width: 1000px; border-radius: 12px; overflow: hidden;
+            box-shadow: 0 20px 40px rgba(20, 20, 19, 0.1); background: white;
+        }
+
+        #canvas-container canvas { display: block; width: 100% !important; height: auto !important; }
+
+        .loading { display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--anthropic-mid-gray); }
+
+        @media (max-width: 600px) {
+            .container { flex-direction: column; }
+            .sidebar { width: 100%; }
+            .canvas-area { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 控制侧栏 -->
+        <div class="sidebar">
+            <h1>泊流 · The Berth Current</h1>
+            <div class="subtitle">挪车二维码品牌图案生成器 —— 秩序网格中的湍流，与网格被一个信号唤醒的瞬间。</div>
+
+            <!-- Seed（模板固定结构） -->
+            <div class="control-section">
+                <h3>Seed</h3>
+                <input type="number" id="seed-input" class="seed-input" value="20269" onchange="updateSeed()">
+                <div class="seed-controls">
+                    <button class="button secondary" onclick="previousSeed()">← 上一颗</button>
+                    <button class="button secondary" onclick="nextSeed()">下一颗 →</button>
+                </div>
+                <button class="button tertiary regen-button" onclick="randomSeedAndUpdate()">↻ 随机种子</button>
+            </div>
+
+            <!-- Parameters -->
+            <div class="control-section">
+                <h3>Parameters</h3>
+
+                <div class="control-group">
+                    <label>网格密度（每边模块数）</label>
+                    <div class="slider-container">
+                        <input type="range" id="gridSize" min="12" max="36" step="1" value="24" oninput="updateParam('gridSize', this.value)">
+                        <span class="value-display" id="gridSize-value">24</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>车流速度</label>
+                    <div class="slider-container">
+                        <input type="range" id="flowSpeed" min="0.2" max="3" step="0.1" value="1.2" oninput="updateParam('flowSpeed', this.value)">
+                        <span class="value-display" id="flowSpeed-value">1.2</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>噪声尺度</label>
+                    <div class="slider-container">
+                        <input type="range" id="noiseScale" min="0.002" max="0.02" step="0.001" value="0.006" oninput="updateParam('noiseScale', this.value)">
+                        <span class="value-display" id="noiseScale-value">0.006</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>车道数</label>
+                    <div class="slider-container">
+                        <input type="range" id="laneCount" min="2" max="10" step="1" value="5" oninput="updateParam('laneCount', this.value)">
+                        <span class="value-display" id="laneCount-value">5</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>脉冲间隔（帧）</label>
+                    <div class="slider-container">
+                        <input type="range" id="pulseInterval" min="90" max="600" step="30" value="240" oninput="updateParam('pulseInterval', this.value)">
+                        <span class="value-display" id="pulseInterval-value">240</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>网格存在感</label>
+                    <div class="slider-container">
+                        <input type="range" id="gridPresence" min="0" max="1" step="0.05" value="0.55" oninput="updateParam('gridPresence', this.value)">
+                        <span class="value-display" id="gridPresence-value">0.55</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Colors -->
+            <div class="control-section">
+                <h3>Colors</h3>
+                <div class="color-group">
+                    <label>以太蓝（秩序）</label>
+                    <div class="color-picker-container">
+                        <input type="color" id="colorAzure" value="#0b6bcb" onchange="updateColor('colorAzure', this.value)">
+                        <span class="color-value" id="colorAzure-value">#0b6bcb</span>
+                    </div>
+                </div>
+                <div class="color-group">
+                    <label>青碧（生命 / 脉冲）</label>
+                    <div class="color-picker-container">
+                        <input type="color" id="colorTeal" value="#0d9488" onchange="updateColor('colorTeal', this.value)">
+                        <span class="color-value" id="colorTeal-value">#0d9488</span>
+                    </div>
+                </div>
+                <div class="color-group">
+                    <label>纸底</label>
+                    <div class="color-picker-container">
+                        <input type="color" id="colorPaper" value="#f6f9fb" onchange="updateColor('colorPaper', this.value)">
+                        <span class="color-value" id="colorPaper-value">#f6f9fb</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions（模板固定结构：重新生成 / 重置 / 下载 PNG） -->
+            <div class="control-section">
+                <h3>Actions</h3>
+                <div class="button-row" style="margin-bottom: 8px;">
+                    <button class="button" onclick="regenerate()">重新生成</button>
+                </div>
+                <div class="button-row">
+                    <button class="button secondary" onclick="resetParameters()">重置</button>
+                    <button class="button tertiary" onclick="savePNG()">下载 PNG</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 画布区 -->
+        <div class="canvas-area">
+            <div id="canvas-container">
+                <div class="loading">正在唤醒泊流系统…</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════════
+        // 泊流 · The Berth Current
+        // 母题：二维码模块网格（秩序）+ 车道流线（湍流）+ 连接脉冲（唤醒）
+        // 三个定位灯塔是唯一恒定物；涟漪过处格子点亮又熄灭。
+        // ═══════════════════════════════════════════════════════════════
+
+        let params = {
+            seed: 20269,
+            gridSize: 24,
+            flowSpeed: 1.2,
+            noiseScale: 0.006,
+            laneCount: 5,
+            pulseInterval: 240,
+            gridPresence: 0.55,
+            colorAzure: '#0b6cb',
+            colorTeal: '#0d9488',
+            colorPaper: '#f6f9fb'
+        };
+        // 修正手误（保持默认值一致性）
+        params.colorAzure = '#0b6bcb';
+
+        let defaultParams = JSON.parse(JSON.stringify(params));
+
+        let cells = [];        // 模块网格：{x, y, size, heat, phase}
+        let cols = 0, rows = 0, cellSize = 0;
+        let particles = [];    // 车道粒子
+        let ripples = [];      // 连接脉冲
+        let anchors = [];      // 三座灯塔（定位图形）
+        let frameTick = 0;
+        let azureCol, tealCol, paperCol, inkCol;
+
+        function hexToRgb(hex) {
+            const n = parseInt(hex.slice(1), 16);
+            return [ (n >> 16) & 255, (n >> 8) & 255, n & 255 ];
+        }
+
+        function setup() {
+            let canvas = createCanvas(1200, 1200);
+            canvas.parent('canvas-container');
+            initializeSystem();
+            document.querySelector('.loading').style.display = 'none';
+        }
+
+        function initializeSystem() {
+            randomSeed(params.seed);
+            noiseSeed(params.seed);
+
+            azureCol = hexToRgb(params.colorAzure);
+            tealCol  = hexToRgb(params.colorTeal);
+            paperCol = hexToRgb(params.colorPaper);
+            inkCol   = [13, 21, 32];
+
+            // ── 模块网格 ──
+            cols = params.gridSize;
+            rows = params.gridSize;
+            cellSize = width / cols;
+            cells = [];
+            for (let gy = 0; gy < rows; gy++) {
+                for (let gx = 0; gx < cols; gx++) {
+                    cells.push({
+                        gx, gy,
+                        x: gx * cellSize + cellSize / 2,
+                        y: gy * cellSize + cellSize / 2,
+                        heat: 0,
+                        phase: random(1000)
+                    });
+                }
+            }
+
+            // ── 三座灯塔（二维码定位图形位置）──
+            const a = Math.floor(cols * 0.08);
+            anchors = [
+                { gx: a, gy: a },
+                { gx: cols - 1 - a, gy: a },
+                { gx: a, gy: rows - 1 - a }
+            ];
+
+            // ── 车道粒子 ──
+            particles = [];
+            const lanes = params.laneCount;
+            for (let l = 0; l < lanes; l++) {
+                const laneY = ((l + 1) / (lanes + 1)) * height;
+                const perLane = 7;
+                for (let i = 0; i < perLane; i++) {
+                    particles.push({
+                        laneY,
+                        x: random(width),
+                        speed: (0.6 + random(0.8)) * params.flowSpeed,
+                        len: 30 + random(70),
+                        wob: random(1000)
+                    });
+                }
+            }
+
+            ripples = [];
+            frameTick = 0;
+            background(paperCol[0], paperCol[1], paperCol[2]);
+        }
+
+        function draw() {
+            frameTick++;
+
+            // 半透明底：让上一帧留痕，形成光轨式的积累
+            noStroke();
+            fill(paperCol[0], paperCol[1], paperCol[2], 34);
+            rect(0, 0, width, height);
+
+            // ── 连接脉冲：从某座灯塔发出涟漪 ──
+            if (frameTick % params.pulseInterval === 0) {
+                const an = random(anchors);
+                ripples.push({ x: an.gx * cellSize + cellSize / 2, y: an.gy * cellSize + cellSize / 2, r: 0 });
+            }
+
+            // ── 涟漪扩散，扫过的格子被点亮 ──
+            strokeWeight(2);
+            noFill();
+            for (let i = ripples.length - 1; i >= 0; i--) {
+                const rp = ripples[i];
+                rp.r += 6.5;
+                const band = 26;
+                for (const c of cells) {
+                    const d = dist(c.x, c.y, rp.x, rp.y);
+                    if (Math.abs(d - rp.r) < band) c.heat = Math.max(c.heat, 1 - d / (width * 0.75));
+                }
+                // 波前：青碧色圆弧
+                stroke(tealCol[0], tealCol[1], tealCol[2], 90 * (1 - rp.r / (width * 0.78)));
+                circle(rp.x, rp.y, rp.r * 2);
+                if (rp.r > width * 0.78) ripples.splice(i, 1);
+            }
+            noStroke();
+
+            // ── 车道流线：粒子拖出光轨，途经格子被短暂曝光 ──
+            for (const p of particles) {
+                const prevX = p.x;
+                p.x += p.speed;
+                if (p.x - p.len > width) { p.x = -random(200); p.laneY = (Math.floor(random(params.laneCount)) + 1) / (params.laneCount + 1) * height; }
+                const y1 = p.laneY + (noise(p.wob, frameTick * 0.004) - 0.5) * 46;
+                const y0 = p.laneY + (noise(p.wob, (frameTick - 1) * 0.004) - 0.5) * 46;
+
+                // 车道虚线（马路语言）
+                if (frameTick % 3 === 0) {
+                    stroke(inkCol[0], inkCol[1], inkCol[2], 14);
+                    strokeWeight(1);
+                    for (let dx = 0; dx < width; dx += 90) {
+                        line(dx, p.laneY, dx + 40, p.laneY);
+                    }
+                }
+
+                // 粒子光轨（车灯）
+                stroke(azureCol[0], azureCol[1], azureCol[2], 46);
+                strokeWeight(2.2);
+                line(prevX, y0, p.x, y1);
+
+                // 曝光途经格子
+                const gx = Math.floor(p.x / cellSize);
+                const gy = Math.floor(y1 / cellSize);
+                if (gx >= 0 && gx < cols && gy >= 0 && gy < rows) {
+                    cells[gy * cols + gx].heat = Math.max(cells[gy * cols + gx].heat, 0.5);
+                }
+            }
+            noStroke();
+
+            // ── 模块网格：噪声决定底噪明暗，热量点亮格子 ──
+            const m = cellSize * 0.22; // 模块内边距 → 圆角方格
+            for (const c of cells) {
+                const base = noise(c.gx * params.noiseScale * 3, c.gy * params.noiseScale * 3, frameTick * 0.0022 + c.phase * 0.01);
+                let alpha = 0;
+                if (base > 1 - params.gridPresence * 0.62) {
+                    alpha = (base - (1 - params.gridPresence * 0.62)) * 120;
+                }
+                if (c.heat > 0.02) {
+                    alpha = Math.max(alpha, c.heat * 210);
+                }
+                if (alpha > 3) {
+                    const isTeal = c.heat > 0.35;
+                    const col = isTeal ? tealCol : azureCol;
+                    fill(col[0], col[1], col[2], Math.min(alpha, 235));
+                    const s = cellSize - m * 2;
+                    rect(c.x - s / 2, c.y - s / 2, s, s, s * 0.28);
+                }
+                c.heat *= 0.94;
+            }
+
+            // ── 三座灯塔：恒定的定位图形 + 呼吸光晕 ──
+            const ap = cellSize * 7; // 定位图形占 7 个模块（与二维码一致）
+            noFill();
+            for (let i = 0; i < anchors.length; i++) {
+                const an = anchors[i];
+                const cx = an.gx * cellSize + cellSize / 2 + ap / 2 - cellSize / 2;
+                const cy = an.gy * cellSize + cellSize / 2 + ap / 2 - cellSize / 2;
+                const breathe = 18 + 10 * Math.sin(frameTick * 0.03 + i * 2.1);
+                stroke(azureCol[0], azureCol[1], azureCol[2], 30);
+                strokeWeight(2);
+                circle(cx + ap / 2, cy + ap / 2, ap + breathe);
+                noStroke();
+                drawFinder(cx, cy, ap, azureCol, 235);
+            }
+        }
+
+        /** 画一个二维码定位图形（回字：外框 + 内核） */
+        function drawFinder(x, y, size, col, alpha) {
+            const w = size;
+            fill(col[0], col[1], col[2], alpha);
+            rect(x, y, w, w, w * 0.18);
+            fill(paperCol[0], paperCol[1], paperCol[2], 255);
+            rect(x + w * 0.16, y + w * 0.16, w * 0.68, w * 0.68, w * 0.14);
+            fill(col[0], col[1], col[2], alpha);
+            rect(x + w * 0.32, y + w * 0.32, w * 0.36, w * 0.36, w * 0.1);
+        }
+
+        function regenerate() {
+            initializeSystem();
+        }
+
+        function savePNG() {
+            saveCanvas('berth-current-seed-' + params.seed, 'png');
+        }
+
+        // ═══════════════ UI 控制处理 ═══════════════
+
+        function updateParam(paramName, value) {
+            params[paramName] = parseFloat(value);
+            document.getElementById(paramName + '-value').textContent = value;
+            initializeSystem();
+        }
+
+        function updateColor(colorId, value) {
+            const key = colorId === 'colorAzure' ? 'colorAzure' : colorId === 'colorTeal' ? 'colorTeal' : 'colorPaper';
+            params[key] = value;
+            document.getElementById(colorId + '-value').textContent = value;
+            initializeSystem();
+        }
+
+        // ═══════════════ Seed 控制（模板固定） ═══════════════
+
+        function updateSeedDisplay() {
+            document.getElementById('seed-input').value = params.seed;
+        }
+
+        function updateSeed() {
+            let input = document.getElementById('seed-input');
+            let newSeed = parseInt(input.value);
+            if (newSeed && newSeed > 0) {
+                params.seed = newSeed;
+                initializeSystem();
+            } else {
+                updateSeedDisplay();
+            }
+        }
+
+        function previousSeed() {
+            params.seed = Math.max(1, params.seed - 1);
+            updateSeedDisplay();
+            initializeSystem();
+        }
+
+        function nextSeed() {
+            params.seed = params.seed + 1;
+            updateSeedDisplay();
+            initializeSystem();
+        }
+
+        function randomSeedAndUpdate() {
+            params.seed = Math.floor(Math.random() * 999999) + 1;
+            updateSeedDisplay();
+            initializeSystem();
+        }
+
+        function resetParameters() {
+            params = JSON.parse(JSON.stringify(defaultParams));
+            const sliders = ['gridSize', 'flowSpeed', 'noiseScale', 'laneCount', 'pulseInterval', 'gridPresence'];
+            for (const id of sliders) {
+                document.getElementById(id).value = params[id];
+                document.getElementById(id + '-value').textContent = params[id];
+            }
+            document.getElementById('colorAzure').value = params.colorAzure;
+            document.getElementById('colorAzure-value').textContent = params.colorAzure;
+            document.getElementById('colorTeal').value = params.colorTeal;
+            document.getElementById('colorTeal-value').textContent = params.colorTeal;
+            document.getElementById('colorPaper').value = params.colorPaper;
+            document.getElementById('colorPaper-value').textContent = params.colorPaper;
+            updateSeedDisplay();
+            initializeSystem();
+        }
+
+        window.addEventListener('load', function () {
+            updateSeedDisplay();
+        });
+    </script>
+</body>
+</html>

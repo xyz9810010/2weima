@@ -3,10 +3,94 @@
 const core = require('./core');
 const { esc, fmtTime, fmtShortTime } = core;
 
-/* 图标一律内联 SVG：字体符号（☎）在不同系统里长得不一样，也没法跟随文字颜色和粗细 */
+/* ------------------------------------------------------------------ */
+/* 内联 SVG 图标                                                       */
+/*                                                                     */
+/* 图标一律内联 SVG：字体符号（☎）在不同系统里长得不一样，               */
+/* 也没法跟随文字颜色和粗细。装饰性图标全部 aria-hidden。                */
+/* ------------------------------------------------------------------ */
+
 const ICON_PHONE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
 
 const ICON_WARN = `<svg class="warn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+
+const ICON_CAR = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11l1.6-4.2A2 2 0 0 1 8.5 5.5h7a2 2 0 0 1 1.9 1.3L19 11"/><path d="M4 11h16a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1.5"/><path d="M4 11a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h1.5"/><path d="M7 17v1.5M17 17v1.5"/><path d="M7.5 13.5h.01M16.5 13.5h.01"/></svg>`;
+
+const ICON_TAG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.6 13.4 12.6 21.4a2 2 0 0 1-2.8 0L3 14.6V4h10.6l7 7a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="8.5" r="0.5"/></svg>`;
+
+const ICON_BELL = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>`;
+
+const ICON_USERS = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
+
+/* 品牌记号：二维码定位图形（泊流「三座灯塔」的抽象） */
+const BRAND_MARK = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d="M3 3h7v7H3V3zm1.75 1.75v3.5h3.5v-3.5h-3.5zM14 3h7v7h-7V3zm1.75 1.75v3.5h3.5v-3.5h-3.5zM3 14h7v7H3v-7zm1.75 1.75v3.5h3.5v-3.5h-3.5zM14 14h2.5v2.5H14V14zm4.5 0H21v2.5h-2.5V14zM14 18.5h2.5V21H14v-2.5zm4.5 0H21V21h-2.5v-2.5z"/></svg>`;
+
+/**
+ * 泊流静态切片：点阵网格 + 车道虚线 + 一座灯塔。
+ * 纯装饰（aria-hidden），用 currentColor 上色，随主题自动适配；
+ * 布局是确定性排布（品牌固定图案），不是每次随机的。
+ */
+function tidePattern(extraClass = '') {
+  return `<svg class="tide ${extraClass}" viewBox="0 0 240 110" aria-hidden="true" focusable="false">
+  <g fill="currentColor">
+    <rect x="10" y="14" width="8" height="8" rx="2.5" opacity=".14"/>
+    <rect x="26" y="30" width="8" height="8" rx="2.5" opacity=".26"/>
+    <rect x="42" y="14" width="8" height="8" rx="2.5" opacity=".2"/>
+    <rect x="58" y="30" width="8" height="8" rx="2.5" opacity=".12"/>
+    <rect x="74" y="46" width="8" height="8" rx="2.5" opacity=".24"/>
+    <rect x="90" y="30" width="8" height="8" rx="2.5" opacity=".16"/>
+    <rect x="106" y="14" width="8" height="8" rx="2.5" opacity=".28"/>
+    <rect x="122" y="30" width="8" height="8" rx="2.5" opacity=".12"/>
+    <rect x="138" y="46" width="8" height="8" rx="2.5" opacity=".22"/>
+    <rect x="154" y="30" width="8" height="8" rx="2.5" opacity=".14"/>
+    <rect x="26" y="62" width="8" height="8" rx="2.5" opacity=".2"/>
+    <rect x="58" y="78" width="8" height="8" rx="2.5" opacity=".16"/>
+    <rect x="90" y="62" width="8" height="8" rx="2.5" opacity=".26"/>
+    <rect x="122" y="78" width="8" height="8" rx="2.5" opacity=".14"/>
+    <rect x="154" y="62" width="8" height="8" rx="2.5" opacity=".2"/>
+    <rect x="106" y="94" width="8" height="8" rx="2.5" opacity=".18"/>
+    <rect x="42" y="94" width="8" height="8" rx="2.5" opacity=".12"/>
+    <rect x="138" y="94" width="8" height="8" rx="2.5" opacity=".24"/>
+  </g>
+  <g fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="7 9" stroke-linecap="round" opacity=".32">
+    <path d="M8 56 C 52 48, 100 64, 148 54 S 214 46, 232 54"/>
+  </g>
+  <g aria-hidden="true">
+    <rect x="192" y="26" width="34" height="34" rx="8" fill="none" stroke="currentColor" stroke-width="3" opacity=".85"/>
+    <rect x="201" y="35" width="16" height="16" rx="4" fill="currentColor" opacity=".85"/>
+  </g>
+</svg>`;
+}
+
+/* 扫码页拨号按钮背后的涟漪：泊流的「连接脉冲」——
+   一个信号从贴纸出发，把车主和陌生人连在同一条波前上 */
+const RIPPLE_SVG = `<svg class="tide-ripple" viewBox="0 0 480 240" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
+  <g fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="240" cy="250" r="64" opacity=".55"/>
+    <circle cx="240" cy="250" r="112" opacity=".4"/>
+    <circle cx="240" cy="250" r="160" opacity=".28"/>
+    <circle cx="240" cy="250" r="208" opacity=".18"/>
+  </g>
+</svg>`;
+
+/* 卡片标题旁的小图标（语义装饰，跟随 --primary） */
+function cardIcon(icon) {
+  return `<span class="card-icon" aria-hidden="true">${icon}</span>`;
+}
+
+/* 计数标题：首屏和 AJAX 局部刷新必须共用同一份实现，
+   否则保存一次之后图标消失（「点一下变了样」）。 */
+function carCountHtml(n) {
+  return `${cardIcon(ICON_CAR)}车辆与贴纸（${n}）`;
+}
+
+function codeCountHtml(n) {
+  return `${cardIcon(ICON_TAG)}贴纸编号（${n}）`;
+}
+
+function userCountHtml(n) {
+  return `${cardIcon(ICON_USERS)}车主账号（${n}）`;
+}
 
 function layout({ title, body, bodyClass = '' }) {
   return `<!doctype html>
@@ -16,6 +100,9 @@ function layout({ title, body, bodyClass = '' }) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="format-detection" content="telephone=no">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef3f8">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f141b">
 <title>${esc(title)}</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/favicon.svg">
@@ -59,10 +146,11 @@ function scanPage(car, { dialNumber }) {
   return layout({
     title: `挪车提醒 · ${plate}`,
     body: `<main class="wrap wrap-scan">
+  ${tidePattern('tide-hero')}
   <div class="hero">
     <div class="hero-label">挡路的车辆</div>
-    <div class="hero-plate">${esc(plate)}</div>
-    <div class="hero-title">这是一辆临时停放的车辆</div>
+    <div class="hero-plate plate-chip">${esc(plate)}</div>
+    <h1 class="hero-title">这是一辆临时停放的车辆</h1>
   </div>
 
   <section class="card card-note">
@@ -70,6 +158,7 @@ function scanPage(car, { dialNumber }) {
   </section>
 
   <section class="card action-card">
+    ${RIPPLE_SVG}
     ${callBlock}
   </section>
 
@@ -89,7 +178,7 @@ function pickCarPage(cars) {
   const items = cars
     .map(
       (car) => `<a class="pick-item" href="/c/${esc(car.id)}">
-      <span class="pick-plate">${esc(car.plate)}</span>
+      <span class="pick-plate" translate="no">${esc(car.plate)}</span>
       ${car.owner_name ? `<span class="pick-owner">${esc(car.owner_name)} 的车</span>` : ''}
       ${car.hasNumber ? '' : '<span class="pick-warn">暂未留电话</span>'}
     </a>`
@@ -99,8 +188,9 @@ function pickCarPage(cars) {
   return layout({
     title: '请选择挡路的车辆',
     body: `<main class="wrap wrap-scan">
+  ${tidePattern('tide-hero')}
   <div class="hero">
-    <div class="hero-title">请选择挡路的车辆</div>
+    <h1 class="hero-title">请选择挡路的车辆</h1>
     <div class="hero-sub">点一下车牌，就能直接拨给车主</div>
   </div>
 
@@ -128,7 +218,7 @@ function carEditPage({ car, token, dialNumber, notice }) {
   <section class="card">
     <h1 class="card-title">管理我的挪车码</h1>
     <p class="muted">
-      这个页面只能修改 <b>${esc(plate)}</b> 这一辆车（编号 <code>${esc(car.id)}</code>）。
+      这个页面只能修改 <b>${esc(plate)}</b> 这一辆车（编号 <code translate="no">${esc(car.id)}</code>）。
     </p>
     ${notice ? banner(notice, 'info') : ''}
     ${dialNumber ? '' : banner('现在两个号码都是空的，扫码页不会有拨号按钮。请至少填一个。')}
@@ -218,7 +308,12 @@ function loginPage({ mode = 'login', error = '', platformReady = true, hint = ''
     title: isSignup ? '注册 · 挪车码' : '登录 · 挪车码',
     body: `<main class="wrap wrap-narrow">
   <section class="card">
-    <h1 class="card-title">挪车码${isSignup ? ' · 注册' : ''}</h1>
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">${BRAND_MARK}</span>
+      挪车码
+    </div>
+    ${tidePattern('tide-hero')}
+    <h1 class="card-title">${isSignup ? '注册 · 挪车码' : '登录 · 挪车码'}</h1>
     <p class="muted">
       ${
         isSignup
@@ -274,7 +369,7 @@ function plateField(car) {
            placeholder="号码，如 5RT71" aria-label="车牌号码"
            autocomplete="off" autocapitalize="characters" spellcheck="false" data-plate-rest>
   </div>
-  <p class="plate-preview${preview ? ' on' : ''}" data-plate-preview>${esc(preview || '选省份和字母，再填后面的号码')}</p>
+  <p class="plate-preview${preview ? ' on' : ''}" data-plate-preview${preview ? ' translate="no"' : ''}>${esc(preview || '选省份和字母，再填后面的号码')}</p>
   <details class="plate-special"${special ? ' open' : ''}>
     <summary>特殊车牌 / 直接粘贴完整车牌</summary>
     <input type="text" name="plate" maxlength="20" value="${esc(special)}"
@@ -292,7 +387,7 @@ function plateField(car) {
 function carForm(car, action, submitText, { remote = false, carId = '' } = {}) {
   const v = car || {};
   const attrs = remote ? ` data-remote${carId ? ` data-car-id="${esc(carId)}"` : ''}` : '';
-  return `<form method="post" action="${esc(action)}" class="stack"${attrs}>
+  return `<form method="post" action="${esc(action)}" class="stack" autocomplete="off"${attrs}>
   ${plateField(car)}
   <div class="grid-2">
     <label class="field">
@@ -301,12 +396,14 @@ function carForm(car, action, submitText, { remote = false, carId = '' } = {}) {
     </label>
     <label class="field">
       <span class="label">真实手机号 <span class="hint-inline">选填，仅你自己可见</span></span>
-      <input type="text" name="phone" maxlength="20" inputmode="tel" value="${esc(v.phone)}" placeholder="13800138000">
+      <input type="text" name="phone" maxlength="20" inputmode="tel" value="${esc(v.phone)}"
+             placeholder="13800138000" autocomplete="off" spellcheck="false">
     </label>
   </div>
   <label class="field">
     <span class="label">拨号号码 <span class="hint-inline">扫码人拨打的就是它</span></span>
-    <input type="text" name="call_number" maxlength="20" inputmode="tel" value="${esc(v.call_number)}" placeholder="17012345678">
+    <input type="text" name="call_number" maxlength="20" inputmode="tel" value="${esc(v.call_number)}"
+           placeholder="17012345678" autocomplete="off" spellcheck="false">
   </label>
   <p class="hint">
     填的是隐私号 / 虚拟号，扫码人就打它、看不到你的真实号；
@@ -316,11 +413,11 @@ function carForm(car, action, submitText, { remote = false, carId = '' } = {}) {
   <label class="field">
     <span class="label">给扫码人的提示</span>
     <textarea name="note" rows="2" maxlength="200"
-      placeholder="临时停靠，马上回来，如有打扰请联系我，谢谢！">${esc(v.note)}</textarea>
+      placeholder="临时停靠，马上回来，如有打扰请联系我…">${esc(v.note)}</textarea>
   </label>
   <label class="check">
     <input type="checkbox" name="enabled" value="1" ${v.enabled === 0 ? '' : 'checked'}>
-    <span>启用该挪车码（关闭后扫码显示"已停用"）</span>
+    <span>启用该挪车码（关闭后扫码显示「已停用」）</span>
   </label>
   <button class="btn btn-primary" type="submit">${esc(submitText)}</button>
 </form>`;
@@ -331,9 +428,9 @@ function carCard(car, { baseUrl, qrSvg, ownerLabel }) {
   return `<article class="car">
   <div class="car-head">
     <div>
-      <div class="car-plate">${esc(car.plate || '未填写车牌')}</div>
+      <div class="car-plate" translate="no">${esc(car.plate || '未填写车牌')}</div>
       <div class="car-meta">
-        编号 <code>${esc(car.id)}</code>
+        编号 <code translate="no">${esc(car.id)}</code>
         <span class="dot">·</span>创建于 ${esc(fmtTime(car.created_at))}
         ${ownerLabel ? `<span class="dot">·</span>${esc(ownerLabel)}` : ''}
       </div>
@@ -347,7 +444,7 @@ function carCard(car, { baseUrl, qrSvg, ownerLabel }) {
   <div class="car-body">
     <div class="qr-box">${qrSvg}</div>
     <div class="car-actions">
-      <p class="scan-url">${esc(scanUrl)}</p>
+      <p class="scan-url" translate="no">${esc(scanUrl)}</p>
       <div class="btn-row">
         <a class="btn btn-sm btn-ghost" href="/c/${esc(car.id)}" target="_blank" rel="noreferrer">预览</a>
         <a class="btn btn-sm btn-ghost" href="/cars/${esc(car.id)}/print" target="_blank" rel="noreferrer">打印贴纸</a>
@@ -370,7 +467,7 @@ function carCard(car, { baseUrl, qrSvg, ownerLabel }) {
       <b>这辆车的管理链接</b>
       <button class="btn btn-xs btn-ghost" type="button" data-copy="${esc(car.editUrl)}">复制</button>
     </div>
-    <code class="edit-link">${esc(car.editUrl)}</code>
+    <code class="edit-link" translate="no">${esc(car.editUrl)}</code>
     <details class="card-help">
       <summary>这条链接是干什么的？</summary>
       <p class="hint">
@@ -398,8 +495,7 @@ function callRow(record) {
   // 以前每条都重复「有人点了一次拨号」「只记录次数与时间，不记录任何扫码人信息」——
   // 三行字里两行是噪音，20 条记录就是 60 行。这两句话现在只写在卡片标题下面一次。
   //
-  // 时间不带年份：记录都是近期活动，年份只是占地方 ——
-  // 实测 375px 手机上，带年份的「2026-09-21 02:19」加上按钮要 340px，一行只有 309px，必折行。
+  // 时间不带年份：记录都是近期活动，年份只是占地方。
   return `<li class="msg ${unread ? 'msg-unread' : ''}">
   <span class="msg-plate">${esc(record.plate || record.car_id)}</span>
   <span class="msg-time">${esc(fmtShortTime(record.created_at))}</span>
@@ -436,9 +532,9 @@ function carListHtml(cars, { baseUrl, isAdmin }) {
 
 function emptyWarnHtml(emptyCount) {
   if (!emptyCount) return '';
-  return `<div class="banner banner-error">
+  return `<div class="banner banner-error" role="alert">
       有 ${emptyCount} 辆车是空白的（车牌、号码全没有），扫码打开什么也做不了。
-      <form method="post" action="/admin/cleanup-empty" style="display:inline" data-remote
+      <form method="post" action="/admin/cleanup-empty" class="banner-form" data-remote
             data-confirm="确定删除这 ${emptyCount} 辆空白车辆吗？">
         <button class="btn btn-xs btn-danger" type="submit">清理这 ${emptyCount} 辆</button>
       </form>
@@ -447,8 +543,8 @@ function emptyWarnHtml(emptyCount) {
 
 /**
  * 拨号记录列表。
- * 记录只增不减，全铺出来会把整页撑到十几屏（实测 20 条就占 5.4 屏），
- * 所以默认只铺最近 10 条，更早的收进一个 <details> —— 不用 JS，禁用 JS 也能展开。
+ * 记录只增不减，全铺出来会把整页撑到十几屏，
+ * 所以默认只铺最近 10 条，更早的收进一个 <details> —— 禁用 JS 也能展开。
  */
 function recordListHtml(messages, { limit = 10 } = {}) {
   if (!messages.length) return '<p class="muted">还没有人拨号。</p>';
@@ -521,7 +617,7 @@ function codeRowHtml(entry, { cars, isAdmin }) {
 
   return `<li class="code-row">
     <code class="code-id">${esc(entry.code)}</code>
-    <span class="badge ${entry.car_enabled === 0 ? 'badge-off' : 'badge-on'}">${esc(plate)}</span>
+    <span class="badge ${entry.car_enabled === 0 ? 'badge-off' : 'badge-on'}" translate="no">${esc(plate)}</span>
     ${isAdmin && entry.owner_contact ? `<span class="muted code-owner">${esc(entry.owner_contact)}</span>` : ''}
     <span class="code-ops">
       <a class="btn btn-xs btn-ghost" href="/codes/${esc(entry.code)}/print" target="_blank" rel="noreferrer">打印</a>
@@ -596,10 +692,11 @@ function bindCodePage({ code, cars = [], loggedIn = false, home = '/' }) {
   return layout({
     title: '贴纸待绑定',
     body: `<main class="wrap wrap-scan">
+  ${tidePattern('tide-hero')}
   <div class="hero">
     <div class="hero-label">贴纸编号</div>
-    <div class="hero-plate hero-code">${esc(code)}</div>
-    <div class="hero-title">这张贴纸还没绑定车辆</div>
+    <div class="hero-plate plate-chip hero-code" translate="no">${esc(code)}</div>
+    <h1 class="hero-title">这张贴纸还没绑定车辆</h1>
   </div>
 
   <section class="card card-note">
@@ -634,7 +731,7 @@ function adminPage({
     ? ''
     : `<section class="card card-users">
     <div class="card-head">
-      <h2 class="card-title" id="user-count">车主账号（${users.length}）</h2>
+      <h2 class="card-title" id="user-count">${userCountHtml(users.length)}</h2>
     </div>
     <p class="hint">每个车主一个账号，只能看到和管理自己的车。</p>
     <div id="user-area">${userListHtml(users)}</div>
@@ -659,7 +756,7 @@ function adminPage({
     <div class="car-body">
       <div class="qr-box">${universal.qrSvg}</div>
       <div class="car-actions">
-        <p class="scan-url">${esc(universal.url)}</p>
+        <p class="scan-url" translate="no">${esc(universal.url)}</p>
         <div class="btn-row">
           <a class="btn btn-sm btn-ghost" href="/admin/print-universal" target="_blank" rel="noreferrer">打印通用贴纸</a>
           <a class="btn btn-sm btn-ghost" href="/admin/universal.svg?download=1">下载 SVG</a>
@@ -679,15 +776,20 @@ function adminPage({
   return layout({
     title: isAdmin ? '平台后台' : '我的车辆',
     bodyClass: 'admin',
-    body: `<header class="topbar">
-  <div class="brand">挪车码 · ${isAdmin ? '平台后台' : '我的车辆'}</div>
+    body: `<a class="skip-link" href="#main">跳到主要内容</a>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">${BRAND_MARK}</span>
+    挪车码 · ${isAdmin ? '平台后台' : '我的车辆'}
+  </div>
   <div class="topbar-right">
     <span class="badge ${unread ? 'badge-new' : 'badge-on'}" id="unread-badge">未读 ${unread}</span>
     <form method="post" action="/logout"><button class="btn btn-sm btn-ghost" type="submit">退出</button></form>
   </div>
 </header>
 
-<main class="wrap">
+<main class="wrap" id="main">
+  <h1 class="sr-only">${isAdmin ? '平台后台' : '我的车辆'}</h1>
   <div id="notice-area">${notice ? banner(notice.text, notice.kind) : ''}</div>
   ${
     isAdmin
@@ -711,7 +813,7 @@ function adminPage({
 
   <section class="card card-cars">
     <div class="card-head">
-      <h2 class="card-title" id="car-count">车辆与贴纸（${cars.length}）</h2>
+      <h2 class="card-title" id="car-count">${carCountHtml(cars.length)}</h2>
       <div id="car-actions">
         ${cars.length ? `<a class="btn btn-sm btn-primary" href="/print-all" target="_blank" rel="noreferrer">批量打印全部贴纸</a>` : ''}
       </div>
@@ -733,7 +835,7 @@ function adminPage({
 
   <section class="card card-codes">
     <div class="card-head">
-      <h2 class="card-title" id="code-count">贴纸编号（${codes.length}）</h2>
+      <h2 class="card-title" id="code-count">${codeCountHtml(codes.length)}</h2>
       <div id="code-actions">
         <form method="post" action="/codes" class="code-generate" data-remote>
           <input type="number" name="count" value="1" min="1" max="50" inputmode="numeric"
@@ -759,7 +861,7 @@ function adminPage({
 
   <section class="card card-records">
     <div class="card-head">
-      <h2 class="card-title">拨号记录</h2>
+      <h2 class="card-title">${cardIcon(ICON_BELL)}拨号记录</h2>
       <div id="record-actions">${recordActionsHtml(unread)}</div>
     </div>
     <p class="hint">这里只记「有人点了一次拨号按钮」，不记录扫码人的 IP、设备信息，也不记录通话内容与号码。</p>
@@ -877,7 +979,7 @@ function printPage(
   });
 }
 
-/** 一张 A4 每行能放几张：和 CSS 里 .sticker-sheet 的宽度、间距保持同一套算法 */
+/** 一张 A4 每行能放几张：和 CSS 里贴纸网格的宽度、间距保持同一套算法 */
 const STICKER_MM = { square: 50, square6: 60, rect: 100 };
 const SHEET_MM = 198; // A4 210mm 减去左右各 6mm 页边距
 const SHEET_GAP_MM = 5;
@@ -939,6 +1041,9 @@ module.exports = {
   loginPage,
   adminPage,
   bannerHtml,
+  carCountHtml,
+  codeCountHtml,
+  userCountHtml,
   carListHtml,
   emptyWarnHtml,
   recordListHtml,
