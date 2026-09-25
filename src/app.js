@@ -118,11 +118,29 @@ function createApp(options) {
   const qrCache = new Map();
 
   function qrSvgForContent(content) {
-    let svg = qrCache.get(content);
+    return cachedQr(content, 3);
+  }
+
+  /**
+   * 贴纸（打印页）专用二维码：静默区从 3 模块收到 2。
+   *
+   * 贴纸上的白边由我们自己管：1mm 内边距 + 二维码盒居中留白，
+   * 深色码到黑色边框的总白距约 6~8mm，本就超过 4 模块静默区；
+   * 盒内再含 3 模块静默区等于把同一段白边付了两次钱，
+   * 50mm 贴纸上二维码本体因此小了 15%。屏幕二维码（后台卡片、下载的 SVG）
+   * 没有贴纸这层物理白边，仍保持 quiet 3。
+   */
+  function qrSvgForPrint(content) {
+    return cachedQr(content, 2);
+  }
+
+  function cachedQr(content, quiet) {
+    const key = `${quiet}:${content}`;
+    let svg = qrCache.get(key);
     if (!svg) {
-      svg = qr.toSvg(content, { scale: 8, quiet: 3 });
+      svg = qr.toSvg(content, { scale: 8, quiet });
       if (qrCache.size > 500) qrCache.clear();
-      qrCache.set(content, svg);
+      qrCache.set(key, svg);
     }
     return svg;
   }
@@ -481,7 +499,7 @@ function createApp(options) {
     const base = baseUrlOf(req);
     return htmlResponse(
       200,
-      views.printPage(car, { baseUrl: base, qrSvg: qrSvgForContent(carUrl(car, base)) })
+      views.printPage(car, { baseUrl: base, qrSvg: qrSvgForPrint(carUrl(car, base)) })
     );
   }
 
@@ -983,7 +1001,7 @@ function createApp(options) {
         { id: found.code, plate: found.car ? found.car.plate || '' : '' },
         {
           baseUrl: base,
-          qrSvg: qrSvgForContent(`${base}/c/${found.code}`),
+          qrSvg: qrSvgForPrint(`${base}/c/${found.code}`),
           size: stickerSize(url),
           path: `/codes/${found.code}/print`,
           code: found.code,
@@ -1015,7 +1033,7 @@ function createApp(options) {
         cars: blank.map((entry) => ({
           id: entry.code,
           plate: entry.code,
-          qrSvg: qrSvgForContent(`${base}/c/${entry.code}`),
+          qrSvg: qrSvgForPrint(`${base}/c/${entry.code}`),
         })),
         baseUrl: base,
         size: stickerSize(url),
@@ -1060,7 +1078,7 @@ function createApp(options) {
         { id: '', plate: '', placeholder: true },
         {
           baseUrl: base,
-          qrSvg: qrSvgForContent(universalUrl(base)),
+          qrSvg: qrSvgForPrint(universalUrl(base)),
           universal: true,
           size: stickerSize(url),
           path: '/admin/print-universal',
@@ -1081,7 +1099,7 @@ function createApp(options) {
       .map((car) => ({
         id: car.id,
         plate: car.plate || '未填写车牌',
-        qrSvg: qrSvgForContent(carUrl(car, base)),
+        qrSvg: qrSvgForPrint(carUrl(car, base)),
         scanUrl: carUrl(car, base),
       }));
     return htmlResponse(
@@ -1121,7 +1139,7 @@ function createApp(options) {
       200,
       views.printPage(car, {
         baseUrl: base,
-        qrSvg: qrSvgForContent(carUrl(car, base)),
+        qrSvg: qrSvgForPrint(carUrl(car, base)),
         size: stickerSize(url),
         path: `/cars/${car.id}/print`,
       })

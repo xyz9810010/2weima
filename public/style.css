@@ -1458,8 +1458,10 @@ select {
 /* 正方形两款：50×50mm 与 60×60mm。
    三行文字各占一行高度，二维码拿剩下的部分。
    数字是「文字刚好放得下、二维码取最大」的实测结果：
-   50mm 款可用高 46.5mm = 标题 4.5 + 副标题 2.2 + 二维码 34.5 + 上下留白 2 + 提示 2.9；
-   60mm 款可用高 55.5mm = 标题 5.7 + 副标题 3.3 + 二维码 40.5 + 上下留白 2 + 提示 3.5。 */
+   50mm 款可用高 49mm = 上下留白 2 + 标题 4.1 + 副标题 2.3 + 二维码 37.5 + 二维码缝 1 + 提示 2.7；
+   60mm 款可用高 59mm = 上下留白 3 + 标题 5.3 + 副标题 3.4 + 二维码 43.5 + 二维码缝 1.2 + 提示 3.1。
+   二维码取 quiet 2 静默区（见 app.js qrSvgForPrint）：贴纸的物理白边
+   已经远超 4 模块，盒内再含 3 模块纯属把同一段白边付两次钱。 */
 .sticker-square,
 .sticker-square6 {
   flex-direction: column;
@@ -1469,13 +1471,13 @@ select {
 .sticker-square {
   width: 50mm;
   height: 50mm;
-  padding: 1.5mm;
+  padding: 1mm;
 }
 
 .sticker-square6 {
   width: 60mm;
   height: 60mm;
-  padding: 2mm;
+  padding: 1.5mm;
 }
 
 .sticker-square .sticker-title,
@@ -1486,11 +1488,11 @@ select {
 }
 
 .sticker-square .sticker-title {
-  font-size: 11pt;
+  font-size: 10pt;
 }
 
 .sticker-square6 .sticker-title {
-  font-size: 14pt;
+  font-size: 13pt;
 }
 
 .sticker-square .sticker-sub,
@@ -1501,29 +1503,30 @@ select {
 }
 
 .sticker-square .sticker-sub {
-  font-size: 5.5pt;
-  margin-top: 0.3mm;
+  font-size: 5pt;
+  margin-top: 0.2mm;
 }
 
 .sticker-square6 .sticker-sub {
-  font-size: 8pt;
-  margin-top: 0.5mm;
+  font-size: 7pt;
+  margin-top: 0.4mm;
 }
 
 .sticker-square .sticker-qr,
 .sticker-square6 .sticker-qr {
   flex: 0 0 auto;
-  margin: 1mm 0;
 }
 
 .sticker-square .sticker-qr {
-  width: 34.5mm;
-  height: 34.5mm;
+  width: 37.5mm;
+  height: 37.5mm;
+  margin: 0.5mm 0;
 }
 
 .sticker-square6 .sticker-qr {
-  width: 40.5mm;
-  height: 40.5mm;
+  width: 43.5mm;
+  height: 43.5mm;
+  margin: 0.6mm 0;
 }
 
 .sticker-square .sticker-tip,
@@ -1532,27 +1535,27 @@ select {
 }
 
 .sticker-square .sticker-tip {
-  font-size: 6.5pt;
+  font-size: 6pt;
 }
 
 .sticker-square6 .sticker-tip {
-  font-size: 8pt;
+  font-size: 7pt;
 }
 
 /* 长方形 100mm × 50mm：二维码在左，文字在右 */
 .sticker-rect {
   width: 100mm;
   height: 50mm;
-  padding: 2mm;
+  padding: 1.5mm;
   flex-direction: row;
-  gap: 4mm;
+  gap: 3.5mm;
   text-align: left;
 }
 
 .sticker-rect .sticker-qr {
-  /* 贴纸高 50mm，去掉内边距与边框后可用约 45.2mm —— 码顶到这个上限 */
-  width: 45mm;
-  height: 45mm;
+  /* 贴纸高 50mm，去掉内边距与边框后可用约 46.2mm —— 码顶到这个上限 */
+  width: 46mm;
+  height: 46mm;
   flex: 0 0 auto;
   margin: 0;
 }
