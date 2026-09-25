@@ -1,0 +1,24 @@
+/* 无 JS 时的降级样式（由 <noscript> 引入，开 JS 的浏览器不会加载它）。
+   编辑资料弹窗在禁脚本时降级成页内常开的表单 —— 和以前的折叠区一样能改能存，
+   「编辑资料」触发按钮与关闭按钮失去意义，藏掉。 */
+
+.car-edit-dialog {
+  display: block;
+  position: static;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.car-edit-dialog::backdrop {
+  display: none;
+}
+
+.car-edit-trigger,
+.dialog-close {
+  display: none;
+}

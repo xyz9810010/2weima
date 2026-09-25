@@ -1066,23 +1066,81 @@ select {
   word-break: break-all;
 }
 
+/* 编辑资料弹窗：原生 <dialog>。
+   焦点圈禁、Esc 关闭是浏览器给的；打开/关闭/点遮罩关闭见 public/app.js。
+   无 JS 时由 nojs.css 降级成页内常开表单。 */
 .car-edit {
   margin-top: 14px;
   border-top: 1px dashed var(--line-strong);
   padding-top: var(--sp-3);
 }
 
-.car-edit summary {
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 14px;
-  margin-bottom: var(--sp-3);
-  color: var(--muted);
-  padding: 6px 0;
+.car-edit-dialog {
+  width: min(640px, calc(100vw - 32px));
+  max-height: min(86vh, 880px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 24px 60px rgba(13, 32, 58, 0.3);
 }
 
-.car-edit summary:hover {
-  color: var(--primary);
+.car-edit-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.car-edit-dialog[open] {
+  animation: dialog-in 0.16s ease-out;
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.dialog-close {
+  flex: 0 0 auto;
+  /* 关闭按钮是个细叉，触控区域垫到 44px 下限 */
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-close svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.dialog-body {
+  padding: var(--sp-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .danger-zone {

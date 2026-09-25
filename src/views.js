@@ -107,6 +107,8 @@ function layout({ title, body, bodyClass = '' }) {
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/favicon.svg">
 <link rel="stylesheet" href="/style.css">
+<!-- 禁用 JS 时加载降级样式：编辑资料弹窗变成页内展开的表单（旧折叠区的行为） -->
+<noscript><link rel="stylesheet" href="/nojs.css"></noscript>
 <script src="/app.js" defer></script>
 </head>
 <body${bodyClass ? ` class="${esc(bodyClass)}"` : ''}>
@@ -478,14 +480,24 @@ function carCard(car, { baseUrl, qrSvg, ownerLabel }) {
     </details>
   </div>
 
-  <details class="car-edit" data-car-id="${esc(car.id)}">
-    <summary>编辑资料（换车牌 / 换号码 / 换车都改这里）</summary>
-    ${carForm(car, `/cars/${car.id}`, '保存修改', { remote: true, carId: car.id })}
-    <form method="post" action="/cars/${esc(car.id)}/delete" class="danger-zone" data-remote
-          data-confirm="确定删除车辆 ${esc(car.plate || car.id)}？该车的拨号记录也会一起删除。">
-      <button class="btn btn-sm btn-danger" type="submit">删除该车辆</button>
-    </form>
-  </details>
+  <div class="car-edit">
+    <button class="btn btn-sm btn-ghost car-edit-trigger" type="button" data-dialog-open="car-dialog-${esc(car.id)}">编辑资料</button>
+    <dialog class="car-edit-dialog" id="car-dialog-${esc(car.id)}" aria-labelledby="car-dialog-title-${esc(car.id)}">
+      <div class="dialog-head">
+        <h2 class="dialog-title" id="car-dialog-title-${esc(car.id)}">编辑资料（换车牌 / 换号码 / 换车都改这里）</h2>
+        <button class="btn btn-xs btn-ghost dialog-close" type="button" data-dialog-close aria-label="关闭弹窗">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="dialog-body">
+        ${carForm(car, `/cars/${car.id}`, '保存修改', { remote: true, carId: car.id })}
+        <form method="post" action="/cars/${esc(car.id)}/delete" class="danger-zone" data-remote
+              data-confirm="确定删除车辆 ${esc(car.plate || car.id)}？该车的拨号记录也会一起删除。">
+          <button class="btn btn-sm btn-danger" type="submit">删除该车辆</button>
+        </form>
+      </div>
+    </dialog>
+  </div>
 </article>`;
 }
 

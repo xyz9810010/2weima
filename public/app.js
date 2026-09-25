@@ -52,25 +52,6 @@
     'user-area',
   ];
 
-  function openEditIds() {
-    // 记住哪些「编辑资料」是展开的，换完片段再展开回去，免得每次保存都被收起
-    var ids = [];
-    var nodes = document.querySelectorAll('details.car-edit[open]');
-    for (var i = 0; i < nodes.length; i++) {
-      ids.push(nodes[i].getAttribute('data-car-id') || '');
-    }
-    return ids;
-  }
-
-  function restoreOpenEdits(ids) {
-    if (!ids || !ids.length) return;
-    for (var i = 0; i < ids.length; i++) {
-      if (!ids[i]) continue;
-      var node = document.querySelector('details.car-edit[data-car-id="' + ids[i] + '"]');
-      if (node) node.open = true;
-    }
-  }
-
   function openGroupIndexes(scope) {
     // 「待绑定 / 已绑定」这两组也按展开状态记住，否则绑定一条之后列表整个收起来，
     // 用户还得再点一下才能看到结果
@@ -88,7 +69,6 @@
   }
 
   function applyFragments(payload) {
-    var opened = openEditIds();
     var codeArea = document.getElementById('code-area');
     var openedGroups = codeArea ? openGroupIndexes(codeArea) : [];
     var html = payload.html || {};
@@ -98,7 +78,6 @@
       var el = document.getElementById(id);
       if (el) el.innerHTML = html[id];
     }
-    restoreOpenEdits(opened);
     if (codeArea) restoreOpenGroups(codeArea, openedGroups);
 
     var badge = document.getElementById('unread-badge');
@@ -270,31 +249,78 @@
       window.prompt('复制这条链接：', text);
     }
   });
+  // 8) 编辑资料弹窗：原生 <dialog>。焦点圈禁与 Esc 关闭由浏览器提供，
+  //    这里只负责打开、关闭、点遮罩关闭。CSP 禁内联脚本，全部走事件委托。
+  document.addEventListener('click', function (event) {
+    var opener = event.target.closest('[data-dialog-open]');
+    if (opener) {
+      var dialog = document.getElementById(opener.getAttribute('data-dialog-open'));
+      if (!dialog) return;
+      if (typeof dialog.showModal === 'function') {
+        dialog.showModal();
+      } else {
+        // 老浏览器没有 showModal：直接标 open 当页内块级元素用
+        dialog.setAttribute('open', '');
+      }
+      // 每次打开都还原成服务端渲染的初始值。弹窗关闭后 DOM 不销毁，
+      // 上次误改的号码会留在输入框里：下次打开像没动过，一保存就连带改掉
+      // （想改称呼也会把车牌一起改了）。form.reset() 还原的正是默认值。
+      var forms = dialog.querySelectorAll('form');
+      for (var i = 0; i < forms.length; i++) {
+        forms[i].reset();
+        updatePlatePreview(forms[i]);
+      }
+      var first = dialog.querySelector('.dialog-body input, .dialog-body select, .dialog-body textarea');
+      if (first) first.focus();
+      return;
+    }
+
+    var closer = event.target.closest('[data-dialog-close]');
+    if (closer) {
+      var box = closer.closest('dialog');
+      if (box) {
+        if (typeof box.close === 'function') box.close();
+        else box.removeAttribute('open');
+      }
+      return;
+    }
+
+    // 点遮罩关闭：click 落在 dialog 元素自身、且坐标在它的盒子之外
+    if (event.target instanceof HTMLDialogElement && event.target.hasAttribute('open')) {
+      var rect = event.target.getBoundingClientRect();
+      var outside =
+        event.clientY < rect.top ||
+        event.clientY >= rect.bottom ||
+        event.clientX < rect.left ||
+        event.clientX >= rect.right;
+      if (outside) event.target.close();
+    }
+  });
+
   // 5) 车牌：自动补全格式（大写、只留有效字符）+ 实时预览 + 记住上次选的省份
-  function plateEls() {
-    return {
-      province: document.querySelector('[data-plate-province]'),
-      city: document.querySelector('[data-plate-city]'),
-      rest: document.querySelector('[data-plate-rest]'),
-      preview: document.querySelector('[data-plate-preview]'),
-      raw: document.querySelector('[data-plate-raw]'),
-    };
+  //    一页可能同时存在多张车牌表单（新增车辆 + 每辆车一个编辑弹窗），
+  //    预览必须按事件所在的表单更新，否则在弹窗里打字改的是背后表单的预览行。
+  //    作用域取 <form>：三段输入在 .plate-input 里，预览行与特殊车牌是它的兄弟，
+  //    只看 .plate-input 会取不到预览（踩过）。
+  function plateFormOf(node) {
+    var form = node && node.closest ? node.closest('form') : null;
+    return form || document;
   }
 
-  function updatePlatePreview() {
-    var el = plateEls();
-    if (!el.preview || !el.province || !el.city || !el.rest) return;
+  function updatePlatePreview(scope) {
+    scope = scope || document;
+    var preview = scope.querySelector('[data-plate-preview]');
+    var province = scope.querySelector('[data-plate-province]');
+    var city = scope.querySelector('[data-plate-city]');
+    var rest = scope.querySelector('[data-plate-rest]');
+    if (!preview || !province || !city || !rest) return;
 
-    var p = el.province.value;
-    var c = el.city.value;
-    var r = el.rest.value;
-
-    if (p && c && r) {
-      el.preview.textContent = p + c + '·' + r;
-      el.preview.className = 'plate-preview on';
+    if (province.value && city.value && rest.value) {
+      preview.textContent = province.value + city.value + '·' + rest.value;
+      preview.className = 'plate-preview on';
     } else {
-      el.preview.textContent = '选省份和字母，再填后面的号码';
-      el.preview.className = 'plate-preview';
+      preview.textContent = '选省份和字母，再填后面的号码';
+      preview.className = 'plate-preview';
     }
   }
 
@@ -314,7 +340,7 @@
       target.hasAttribute('data-plate-province') ||
       target.hasAttribute('data-plate-city')
     ) {
-      updatePlatePreview();
+      updatePlatePreview(plateFormOf(target));
     }
   });
 
@@ -333,14 +359,15 @@
 
   // 新增车辆时带出上次用过的省份，编辑已有车辆时不动。
   // 局部刷新提交成功后表单会被 reset，那时也要靠它把省份补回来。
+  // 只认第一张表单（新增车辆）：编辑弹窗里的表单本来就带着值。
   function restoreProvince() {
-    var el = plateEls();
-    if (!el.province || el.province.value) return;
+    var province = document.querySelector('[data-plate-province]');
+    if (!province || province.value) return;
     try {
       var saved = window.localStorage.getItem('chezai.plate.province');
-      if (saved && el.province.querySelector('option[value="' + saved + '"]')) {
-        el.province.value = saved;
-        updatePlatePreview();
+      if (saved && province.querySelector('option[value="' + saved + '"]')) {
+        province.value = saved;
+        updatePlatePreview(document);
       }
     } catch (error) {
       /* 忽略 */
